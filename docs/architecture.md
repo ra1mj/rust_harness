@@ -78,7 +78,7 @@ crates/
 
 `assemble()` 按顺序挂载插件树：`session → shell:local → fs:local → tools → model:mock`（或 `model:http`）。
 
-`rh tui` 是一个全屏终端界面（ratatui + crossterm，最接近 grok）：它订阅 `Context` 上的 `SessionEvent` 事件总线，把 agent loop 追加的每个 durable 事实**实时**渲染到 transcript，底部输入框回车即驱动一轮 turn。会话在多次输入间共享，transcript 像聊天一样累积。
+`rh web` 是一个浏览器界面（axum + WebSocket，最接近 dsh）：每个 WebSocket 连接拥有一个独立 `Session`，前端订阅 `Session::subscribe()` 的实时广播，把 agent loop 追加的每个 durable 事实**实时**渲染到 transcript（含模型逐字流式输出 `assistant/chunk`）。`/api/tools`、`/api/config` 提供工具与插件树面板。
 
 ```text
 plugins (mount order):   session / shell:local / fs:local / tools / model:mock
@@ -105,5 +105,6 @@ turn_end
 | `rh-core` Context/Plugin/Disposer | Cordis 插件宿主 | — |
 | `rh-tool` Tool trait / ToolStream | 能力 seam 的 Consumer | 统一 `Tool` trait |
 | `rh-session` SessionEvent / derive_messages | 会话日志真相 | session-events |
-| `rh-agent` AgentBuilder / Agent / loop | agent-loop 插件形式 | AgentBuilder + Agent |
+| `rh-agent` AgentBuilder / Agent / 流式 loop | agent-loop 插件形式 | AgentBuilder + Agent |
+| `rh-web` axum + WebSocket | Web UI（`dsh web`） | — |
 | `rh-cli` 组合根 | profile/bundle 组合 | composition root 单二进制 |

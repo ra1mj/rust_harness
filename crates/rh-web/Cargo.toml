@@ -1,14 +1,19 @@
 [package]
-name = "rh-session"
+name = "rh-web"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
-description = "rh-session: append-only session event log, projection to model history, session store"
+description = "rh-web: axum web server + WebSocket live transcript for the harness"
 
 [dependencies]
 anyhow.workspace = true
+axum.workspace = true
+futures.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 tokio.workspace = true
 rh-core.workspace = true
+rh-session.workspace = true
+rh-agent.workspace = true
+rh-tool.workspace = true

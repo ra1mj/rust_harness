@@ -118,15 +118,18 @@ pub struct Session {
     id: SessionId,
     events: Arc<RwLock<Vec<SessionEvent>>>,
     sink: Option<Context>,
+    live: tokio::sync::broadcast::Sender<SessionEvent>,
 }
 
 impl Session {
     /// Create a new, empty session.
     pub fn new(id: impl Into<String>, sink: Option<Context>) -> Arc<Self> {
+        let (live, _) = tokio::sync::broadcast::channel(256);
         Arc::new(Self {
             id: id.into(),
             events: Arc::new(RwLock::new(Vec::new())),
             sink,
+            live,
         })
     }
 
@@ -134,8 +137,15 @@ impl Session {
         &self.id
     }
 
-    /// Append a durable event, broadcasting it to observers.
+    /// Subscribe to this session's live event stream (e.g. for a WebSocket).
+    pub fn subscribe(&self) -> tokio::sync::broadcast::Receiver<SessionEvent> {
+        self.live.subscribe()
+    }
+
+    /// Append a durable event, broadcasting it to live subscribers and any
+    /// context observers.
     pub fn append(&self, event: SessionEvent) {
+        let _ = self.live.send(event.clone());
         if let Some(sink) = &self.sink {
             sink.emit(&event);
         }
@@ -180,9 +190,9 @@ impl Session {
                         content,
                     });
                 }
-                SessionEvent::AssistantChunk { text, .. } => {
-                    append_assistant_text(&mut out, text);
-                }
+                // Chunks are replay/streaming fidelity only; model history
+                // comes from the assembled `AssistantMessage`.
+                SessionEvent::AssistantChunk { .. } => {}
                 SessionEvent::ToolCall {
                     tool_call_id,
                     tool_name,
@@ -220,27 +230,14 @@ impl Session {
 
     /// Fork this session: a new id over a copy of the current log.
     pub fn fork(&self, new_id: impl Into<String>) -> Arc<Self> {
+        let (live, _) = tokio::sync::broadcast::channel(256);
         Arc::new(Self {
             id: new_id.into(),
             events: Arc::new(RwLock::new(self.events())),
             sink: self.sink.clone(),
+            live,
         })
     }
-}
-
-fn append_assistant_text(out: &mut Vec<Message>, text: String) {
-    if let Some(last) = out.last_mut().filter(|m| m.role == Role::Assistant) {
-        if let Some(ContentBlock::Text { text: existing }) = last.content.last_mut() {
-            existing.push_str(&text);
-            return;
-        }
-        last.content.push(ContentBlock::Text { text });
-        return;
-    }
-    out.push(Message {
-        role: Role::Assistant,
-        content: vec![ContentBlock::Text { text }],
-    });
 }
 
 fn push_tool_call(out: &mut Vec<Message>, block: ContentBlock) {

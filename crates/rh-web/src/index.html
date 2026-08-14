@@ -1,0 +1,334 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>rh — Rust Harness Agent</title>
+<style>
+  :root {
+    --bg: #0f1115;
+    --panel: #171a21;
+    --panel-2: #1d2129;
+    --border: #2a2f3a;
+    --fg: #e6e8ee;
+    --muted: #8b93a5;
+    --accent: #4c8dff;
+    --green: #35c07a;
+    --red: #e5534b;
+    --yellow: #d9a13b;
+    --cyan: #3fb6c9;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background: var(--bg);
+    color: var(--fg);
+    font: 14px/1.5 -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    display: flex;
+    flex-direction: column;
+  }
+  header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 16px;
+    background: var(--panel);
+    border-bottom: 1px solid var(--border);
+  }
+  header .brand { font-weight: 600; letter-spacing: .2px; }
+  header .brand .rh { color: var(--accent); }
+  header .pill {
+    font-size: 12px;
+    color: var(--muted);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 2px 10px;
+  }
+  header .status { margin-left: auto; display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+  .dot.on { background: var(--green); }
+  .dot.working { background: var(--yellow); animation: pulse 1s infinite; }
+  @keyframes pulse { 50% { opacity: .35; } }
+
+  .layout { flex: 1; display: flex; min-height: 0; }
+  aside {
+    width: 300px;
+    background: var(--panel);
+    border-right: 1px solid var(--border);
+    overflow-y: auto;
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  aside h3 { margin: 0 0 6px; font-size: 12px; text-transform: uppercase; letter-spacing: .8px; color: var(--muted); }
+  .tool { border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; background: var(--panel-2); }
+  .tool .name { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--accent); }
+  .tool .desc { color: var(--muted); font-size: 12px; margin-top: 2px; }
+  .kv { display: flex; flex-wrap: wrap; gap: 6px; }
+  .kv span { font-size: 12px; border: 1px solid var(--border); border-radius: 6px; padding: 1px 8px; color: var(--muted); font-family: ui-monospace, monospace; }
+
+  main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+  #transcript { flex: 1; overflow-y: auto; padding: 16px 18px; }
+  .row { margin: 6px 0; max-width: 760px; }
+  .sep { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 11px; margin: 12px 0; }
+  .sep::before, .sep::after { content: ""; flex: 1; height: 1px; background: var(--border); }
+  .you { color: var(--green); font-weight: 600; }
+  .assistant { color: var(--cyan); font-weight: 600; }
+  .msg { white-space: pre-wrap; word-break: break-word; }
+  .toolcall { display: inline-flex; align-items: center; gap: 6px; color: var(--yellow); font-family: ui-monospace, monospace; font-size: 12px; }
+  .toolresult { color: var(--muted); font-family: ui-monospace, monospace; font-size: 12px; white-space: pre-wrap; word-break: break-word; border-left: 2px solid var(--border); padding-left: 10px; }
+  .toolresult.error { border-left-color: var(--red); }
+  .toolresult .ok { color: var(--green); }
+  .toolresult .err { color: var(--red); }
+
+  footer {
+    border-top: 1px solid var(--border);
+    background: var(--panel);
+    padding: 10px 16px;
+    display: flex;
+    gap: 10px;
+  }
+  footer input {
+    flex: 1;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--fg);
+    padding: 10px 12px;
+    font-size: 14px;
+    outline: none;
+  }
+  footer input:focus { border-color: var(--accent); }
+  footer button {
+    background: var(--accent);
+    border: none;
+    color: #fff;
+    border-radius: 8px;
+    padding: 0 18px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  footer button:disabled { opacity: .5; cursor: default; }
+</style>
+</head>
+<body>
+  <header>
+    <div class="brand"><span class="rh">rh</span> — Rust Harness Agent</div>
+    <span class="pill" id="session">session: —</span>
+    <div class="status"><span class="dot" id="dot"></span><span id="statusText">connecting…</span></div>
+  </header>
+
+  <div class="layout">
+    <aside>
+      <div>
+        <h3>Tools</h3>
+        <div id="tools">loading…</div>
+      </div>
+      <div>
+        <h3>Plugins</h3>
+        <div class="kv" id="plugins">—</div>
+      </div>
+      <div>
+        <h3>Services</h3>
+        <div class="kv" id="services">—</div>
+      </div>
+    </aside>
+
+    <main>
+      <div id="transcript"></div>
+      <footer>
+        <input id="input" placeholder="Type a task… (Enter to send)" autocomplete="off" />
+        <button id="send">Send</button>
+      </footer>
+    </main>
+  </div>
+
+<script>
+(function () {
+  const transcript = document.getElementById('transcript');
+  const input = document.getElementById('input');
+  const sendBtn = document.getElementById('send');
+  const sessionEl = document.getElementById('session');
+  const dot = document.getElementById('dot');
+  const statusText = document.getElementById('statusText');
+
+  let ws;
+  let currentAssistant = null; // { el, text }
+  let working = false;
+
+  function setStatus(state, text) {
+    dot.className = 'dot ' + state; // '', 'on', 'working'
+    statusText.textContent = text;
+  }
+
+  function scrollBottom() { transcript.scrollTop = transcript.scrollHeight; }
+
+  function el(tag, cls, text) {
+    const node = document.createElement(tag);
+    if (cls) node.className = cls;
+    if (text !== undefined) node.textContent = text;
+    return node;
+  }
+
+  function addRow(node) { transcript.appendChild(node); scrollBottom(); }
+
+  function textFromContent(content) {
+    if (!Array.isArray(content)) return '';
+    return content.filter(b => b.kind === 'text').map(b => b.text).join('\n');
+  }
+
+  function finalizeAssistant() {
+    if (currentAssistant) { currentAssistant = null; }
+  }
+
+  function ensureAssistant() {
+    if (currentAssistant) return currentAssistant;
+    const row = el('div', 'row');
+    const who = el('div', 'assistant', 'rh');
+    const msg = el('div', 'msg', '');
+    row.appendChild(who); row.appendChild(msg);
+    addRow(row);
+    currentAssistant = { el: msg };
+    return currentAssistant;
+  }
+
+  function renderEvent(ev) {
+    switch (ev.type) {
+      case 'user_message': {
+        const row = el('div', 'row');
+        row.appendChild(el('div', 'you', 'you'));
+        row.appendChild(el('div', 'msg', textFromContent(ev.content)));
+        addRow(row);
+        finalizeAssistant();
+        break;
+      }
+      case 'assistant_chunk': {
+        ensureAssistant().el.textContent += ev.text;
+        scrollBottom();
+        break;
+      }
+      case 'assistant_message': {
+        const text = textFromContent(ev.content);
+        if (currentAssistant) {
+          if (text && !currentAssistant.el.textContent) currentAssistant.el.textContent = text;
+          currentAssistant = null;
+        } else if (text) {
+          ensureAssistant().el.textContent = text;
+          currentAssistant = null;
+        }
+        break;
+      }
+      case 'tool_call': {
+        const row = el('div', 'row');
+        const chip = el('span', 'toolcall', '⚙ ' + ev.tool_name + ' ');
+        const args = document.createElement('code');
+        args.style.color = 'var(--muted)';
+        args.textContent = JSON.stringify(ev.arguments || {});
+        chip.appendChild(args);
+        row.appendChild(chip);
+        addRow(row);
+        finalizeAssistant();
+        break;
+      }
+      case 'tool_result': {
+        const row = el('div', 'row toolresult' + (ev.is_error ? ' error' : ''));
+        row.appendChild(el('span', ev.is_error ? 'err' : 'ok', ev.is_error ? '✗ ' : '✓ '));
+        let out;
+        try { out = typeof ev.output === 'string' ? ev.output : JSON.stringify(ev.output); }
+        catch (e) { out = String(ev.output); }
+        if (out.length > 800) out = out.slice(0, 800) + '…';
+        row.appendChild(document.createTextNode(out));
+        addRow(row);
+        break;
+      }
+      case 'turn_start': {
+        const sep = el('div', 'sep', 'turn');
+        addRow(sep);
+        setWorking(true);
+        break;
+      }
+      case 'turn_end': {
+        setWorking(false);
+        break;
+      }
+      default:
+        break; // step_start / step_end / etc.
+    }
+  }
+
+  function setWorking(on) {
+    working = on;
+    sendBtn.disabled = on;
+    setStatus(on ? 'working' : 'on', on ? 'working…' : 'connected');
+  }
+
+  function send() {
+    const text = input.value.trim();
+    if (!text || working || !ws || ws.readyState !== WebSocket.OPEN) return;
+    ws.send(JSON.stringify({ type: 'input', text }));
+    input.value = '';
+    input.focus();
+  }
+
+  function connect() {
+    const proto = location.protocol === 'https:' ? 'wss://' : 'ws://';
+    ws = new WebSocket(proto + location.host + '/ws');
+
+    ws.onopen = () => setStatus('on', 'connected');
+    ws.onclose = () => { setStatus('', 'disconnected — retrying…'); setTimeout(connect, 1500); };
+    ws.onerror = () => setStatus('', 'error');
+
+    ws.onmessage = (e) => {
+      let data;
+      try { data = JSON.parse(e.data); } catch (err) { return; }
+      if (data.type === 'hello') {
+        sessionEl.textContent = 'session: ' + data.session_id;
+        return;
+      }
+      if (data.type === 'error') {
+        const row = el('div', 'row toolresult error', 'error: ' + data.error);
+        addRow(row);
+        return;
+      }
+      renderEvent(data);
+    };
+  }
+
+  async function loadMeta() {
+    try {
+      const [toolsRes, configRes] = await Promise.all([fetch('/api/tools'), fetch('/api/config')]);
+      const tools = await toolsRes.json();
+      const config = await configRes.json();
+
+      const toolsBox = document.getElementById('tools');
+      toolsBox.textContent = '';
+      (tools.tools || []).forEach(t => {
+        const box = el('div', 'tool');
+        box.appendChild(el('div', 'name', t.name));
+        box.appendChild(el('div', 'desc', t.description));
+        toolsBox.appendChild(box);
+      });
+
+      const plugins = document.getElementById('plugins');
+      plugins.textContent = '';
+      (config.plugins || []).forEach(p => plugins.appendChild(el('span', '', p)));
+
+      const services = document.getElementById('services');
+      services.textContent = '';
+      (config.services || []).forEach(s => services.appendChild(el('span', '', s)));
+    } catch (err) {
+      // non-fatal: the transcript still works without the sidebar
+    }
+  }
+
+  sendBtn.addEventListener('click', send);
+  input.addEventListener('keydown', (e) => { if (e.key === 'Enter') send(); });
+
+  loadMeta();
+  connect();
+  input.focus();
+})();
+</script>
+</body>
+</html>

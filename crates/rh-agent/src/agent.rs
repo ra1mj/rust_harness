@@ -10,7 +10,9 @@ use rh_core::Context;
 use rh_session::{next_id, ContentBlock, IdKind, Session, SessionEvent};
 use rh_tool::{ToolCallContext, ToolRegistry, ToolStreamItem};
 
-use crate::model::{FinishReason, ModelMessage, ModelProvider, ModelRequest, ModelToolCall};
+use crate::model::{
+    FinishReason, ModelEvent, ModelMessage, ModelProvider, ModelRequest, ModelToolCall,
+};
 
 /// A fresh tool-call id (shared with the mock provider in `model.rs`).
 pub fn next_call_id() -> String {
@@ -112,21 +114,40 @@ impl Agent {
                 messages: model_messages,
                 tools,
             };
-            let response = self.model.complete(request).await?;
 
+            // Consume the model stream, logging each text chunk as a durable
+            // `assistant/chunk` fact so the UI can render it live, then log
+            // the assembled message as the source of model history.
+            let message_id = next_id(IdKind::Message);
+            let mut stream = self.model.stream(request).await?;
+            let mut text = String::new();
+            let mut tool_calls: Vec<ModelToolCall> = Vec::new();
+            let mut finish_reason = FinishReason::Stop;
+            while let Some(event) = stream.next().await {
+                match event {
+                    ModelEvent::Text(chunk) => {
+                        text.push_str(&chunk);
+                        self.session.append(SessionEvent::AssistantChunk {
+                            message_id: message_id.clone(),
+                            text: chunk,
+                        });
+                    }
+                    ModelEvent::ToolCall(call) => tool_calls.push(call),
+                    ModelEvent::Done(reason) => finish_reason = reason,
+                }
+            }
             self.session.append(SessionEvent::AssistantMessage {
-                message_id: next_id(IdKind::Message),
-                content: assistant_blocks(&response.message),
+                message_id,
+                content: assistant_blocks(&text, &tool_calls),
             });
 
-            let wants_tools = response.finish_reason == FinishReason::ToolCalls
-                && !response.message.tool_calls.is_empty();
+            let wants_tools = finish_reason == FinishReason::ToolCalls && !tool_calls.is_empty();
             if !wants_tools {
                 self.session.append(SessionEvent::StepEnd { step_id });
                 break;
             }
 
-            for call in &response.message.tool_calls {
+            for call in &tool_calls {
                 self.session.append(SessionEvent::ToolCall {
                     tool_call_id: call.id.clone(),
                     tool_name: call.name.clone(),
@@ -174,15 +195,15 @@ impl Agent {
     }
 }
 
-/// Convert a model message back into session [`ContentBlock`]s for logging.
-fn assistant_blocks(message: &ModelMessage) -> Vec<ContentBlock> {
+/// Convert assembled model output into session [`ContentBlock`]s for logging.
+fn assistant_blocks(text: &str, calls: &[ModelToolCall]) -> Vec<ContentBlock> {
     let mut blocks = Vec::new();
-    if let Some(text) = &message.content {
-        if !text.is_empty() {
-            blocks.push(ContentBlock::Text { text: text.clone() });
-        }
+    if !text.is_empty() {
+        blocks.push(ContentBlock::Text {
+            text: text.to_string(),
+        });
     }
-    for call in &message.tool_calls {
+    for call in calls {
         blocks.push(ContentBlock::ToolCall {
             id: call.id.clone(),
             name: call.name.clone(),

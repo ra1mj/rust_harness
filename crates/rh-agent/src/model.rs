@@ -1,9 +1,15 @@
 //! The model seam: Service Definition ([`ModelProvider`]) plus a
 //! deterministic mock provider used for keyless runs and tests.
+//!
+//! The seam is **streaming**: a provider returns a [`ModelStream`] of
+//! [`ModelEvent`]s, so the agent loop can log `assistant/chunk` facts as
+//! text arrives and the UI can render it live.
 
+use std::pin::Pin;
 use std::sync::Arc;
 
 use async_trait::async_trait;
+use futures::Stream;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
@@ -113,12 +119,19 @@ pub struct ModelRequest {
     pub tools: Vec<ToolDescription>,
 }
 
-/// A response from a model provider.
+/// One event in a model completion stream.
 #[derive(Debug, Clone)]
-pub struct ModelResponse {
-    pub message: ModelMessage,
-    pub finish_reason: FinishReason,
+pub enum ModelEvent {
+    /// A chunk of assistant text.
+    Text(String),
+    /// A tool call the model wants executed.
+    ToolCall(ModelToolCall),
+    /// Terminal: the reason the completion ended. Always last.
+    Done(FinishReason),
 }
+
+/// An opaque, pinned stream of [`ModelEvent`]s.
+pub type ModelStream = Pin<Box<dyn Stream<Item = ModelEvent> + Send>>;
 
 /// The model adapter seam (the "Service Definition" role).
 ///
@@ -127,17 +140,18 @@ pub struct ModelResponse {
 /// privileged model path to patch.
 #[async_trait]
 pub trait ModelProvider: Send + Sync {
-    async fn complete(&self, request: ModelRequest) -> anyhow::Result<ModelResponse>;
+    /// Stream the model's completion for a request.
+    async fn stream(&self, request: ModelRequest) -> anyhow::Result<ModelStream>;
 }
 
 /// A deterministic, keyless model provider for tests and demos.
 ///
 /// Behavior:
 /// * if the last message is a tool result, synthesize a final assistant
-///   answer;
+///   answer (streamed as text chunks);
 /// * else if the latest user text names one of the tools in the request,
 ///   emit exactly one tool call to that tool with example arguments;
-/// * else echo the user text back as the assistant reply.
+/// * else echo the user text back as the assistant reply (streamed).
 #[derive(Debug, Clone, Default)]
 pub struct MockModelProvider {
     pub model: String,
@@ -145,60 +159,61 @@ pub struct MockModelProvider {
 
 #[async_trait]
 impl ModelProvider for MockModelProvider {
-    async fn complete(&self, request: ModelRequest) -> anyhow::Result<ModelResponse> {
-        let is_after_tool = matches!(
-            request.messages.last().map(|m| m.role),
-            Some(ModelRole::Tool)
-        );
-        if is_after_tool {
-            return Ok(ModelResponse {
-                message: ModelMessage {
-                    role: ModelRole::Assistant,
-                    content: Some("done — the tool result above was recorded to the session log.".into()),
-                    tool_calls: vec![],
-                    tool_call_id: None,
-                },
-                finish_reason: FinishReason::Stop,
-            });
-        }
+    async fn stream(&self, request: ModelRequest) -> anyhow::Result<ModelStream> {
+        let events = events_for(request);
+        Ok(Box::pin(futures::stream::iter(events)))
+    }
+}
 
-        let user_text = request
-            .messages
-            .iter()
-            .rev()
-            .find(|m| m.role == ModelRole::User)
-            .and_then(|m| m.content.clone())
-            .unwrap_or_default();
+fn events_for(request: ModelRequest) -> Vec<ModelEvent> {
+    let is_after_tool = matches!(
+        request.messages.last().map(|m| m.role),
+        Some(ModelRole::Tool)
+    );
+    if is_after_tool {
+        let mut events =
+            chunk_text("done — the tool result above was recorded to the session log.");
+        events.push(ModelEvent::Done(FinishReason::Stop));
+        return events;
+    }
 
-        for tool in &request.tools {
-            if !tool.name.is_empty() && user_text.contains(&tool.name) {
-                let call = ModelToolCall {
+    let user_text = request
+        .messages
+        .iter()
+        .rev()
+        .find(|m| m.role == ModelRole::User)
+        .and_then(|m| m.content.clone())
+        .unwrap_or_default();
+
+    for tool in &request.tools {
+        if !tool.name.is_empty() && user_text.contains(&tool.name) {
+            return vec![
+                ModelEvent::ToolCall(ModelToolCall {
                     id: next_call_id(),
                     name: tool.name.clone(),
                     arguments: example_args_for(&tool.name),
-                };
-                return Ok(ModelResponse {
-                    message: ModelMessage {
-                        role: ModelRole::Assistant,
-                        content: None,
-                        tool_calls: vec![call],
-                        tool_call_id: None,
-                    },
-                    finish_reason: FinishReason::ToolCalls,
-                });
-            }
+                }),
+                ModelEvent::Done(FinishReason::ToolCalls),
+            ];
         }
-
-        Ok(ModelResponse {
-            message: ModelMessage {
-                role: ModelRole::Assistant,
-                content: Some(format!("echo: {user_text}")),
-                tool_calls: vec![],
-                tool_call_id: None,
-            },
-            finish_reason: FinishReason::Stop,
-        })
     }
+
+    let mut events = chunk_text(&format!("echo: {user_text}"));
+    events.push(ModelEvent::Done(FinishReason::Stop));
+    events
+}
+
+/// Split text into fixed-size [`ModelEvent::Text`] chunks for streaming.
+fn chunk_text(text: &str) -> Vec<ModelEvent> {
+    const CHUNK: usize = 6;
+    if text.is_empty() {
+        return Vec::new();
+    }
+    let chars: Vec<char> = text.chars().collect();
+    chars
+        .chunks(CHUNK)
+        .map(|chunk| ModelEvent::Text(chunk.iter().collect()))
+        .collect()
 }
 
 /// Example arguments for the mock provider's synthetic tool calls.

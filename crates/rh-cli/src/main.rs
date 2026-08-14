@@ -18,7 +18,6 @@ use rh_tools::{FileSystemPlugin, ShellPlugin, ToolsPlugin};
 
 #[cfg(feature = "http")]
 mod http;
-mod tui;
 
 #[derive(Parser)]
 #[command(name = "rh", version, about = "A Rust-driven harness agent fusing deepseek-harness and grok-build")]
@@ -41,8 +40,11 @@ enum Command {
     Tools,
     /// Print the assembled plugin tree, services, and tools.
     DumpConfig,
-    /// Launch the full-screen terminal UI.
-    Tui {
+    /// Launch the web UI (single-page app + WebSocket live transcript).
+    Web {
+        /// Address to bind.
+        #[arg(long, default_value = "127.0.0.1:3080")]
+        addr: String,
         /// Use the real HTTP model provider (requires RH_API_KEY).
         #[arg(long)]
         http: bool,
@@ -56,7 +58,11 @@ async fn main() -> anyhow::Result<()> {
         Command::Run { task, http } => run(&task, http).await,
         Command::Tools => tools().await,
         Command::DumpConfig => dump_config().await,
-        Command::Tui { http } => tui::run(assemble(http)?).await,
+        Command::Web { addr, http } => {
+            let assembled = assemble(http)?;
+            let plugins = assembled.plugins.iter().map(|s| s.to_string()).collect();
+            rh_web::serve(assembled.ctx.clone(), plugins, addr.parse()?).await
+        }
     }
 }
 

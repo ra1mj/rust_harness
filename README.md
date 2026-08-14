@@ -21,8 +21,9 @@ cargo build
 # 无 key 运行一次任务（mock 模型，会真实执行 bash 工具）
 cargo run -- run "please use bash to say hello"
 
-# 全屏终端界面（TUI，最接近 grok）
-cargo run -- tui
+# Web 界面（单页应用 + WebSocket 实时 transcript），浏览器打开 http://127.0.0.1:3080
+cargo run -- web
+# 换端口：cargo run -- web --addr 127.0.0.1:8080
 
 # 列出工具 / 打印组装出的插件树
 cargo run -- tools
@@ -40,7 +41,9 @@ export RH_API_KEY=...            # 必填
 export RH_BASE_URL=https://api.deepseek.com   # 可选，默认 DeepSeek
 export RH_MODEL=deepseek-chat    # 可选
 
+# headless 或 web 都可用真实模型
 cargo run --features http -- run "..." --http
+cargo run --features http -- web --http
 ```
 
 ## 仓库结构
@@ -49,10 +52,11 @@ cargo run --features http -- run "..." --http
 crates/
   rh-core/    插件宿主：Context、Plugin、Service、Event、Disposer
   rh-tool/    统一 Tool trait、ToolRegistry、ToolCallContext
-  rh-session/ append-only SessionEvent 日志 + derive_messages 投影
-  rh-agent/   ModelProvider seam、AgentBuilder、turn/step loop
+  rh-session/ append-only SessionEvent 日志 + derive_messages 投影 + 每会话广播
+  rh-agent/   流式 ModelProvider seam、AgentBuilder、turn/step loop
   rh-tools/   能力 seam（Shell/FileSystem）+ bash/fs_read/fs_write/todo_write
-  rh-cli/     组合根 + CLI（run/tools/dump-config/tui）+ TUI + 可选 HTTP provider
+  rh-web/     axum Web 服务 + WebSocket 实时 transcript + 单页前端
+  rh-cli/     组合根 + CLI（run/tools/dump-config/web）+ 可选 HTTP provider
 ```
 
 ## 设计要点
@@ -61,6 +65,7 @@ crates/
 2. **能力 seam**：`Service`（trait）= Definition，注册实现 = Provider，面向模型的 tool = Consumer；换 Provider 即换行为。
 3. **会话日志即真相**：模型请求只由 `session.derive_messages()` 构造，任何模型可见内容都可从日志重建。
 4. **统一工具边界**：所有工具实现一条 `Tool` trait，流式契约 `[Progress*, Terminal]`。
+5. **流式模型输出**：模型 seam 是流式的（`ModelEvent`），loop 边收边记 `assistant/chunk`，Web 前端实时打字。
 
 ## Roadmap（对应 fusion-paths）
 
