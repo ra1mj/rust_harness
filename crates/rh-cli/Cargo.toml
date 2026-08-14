@@ -1,0 +1,32 @@
+[package]
+name = "rh-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "rh-cli: composition root and CLI (run / tools / dump-config)"
+default-run = "rh"
+
+[[bin]]
+name = "rh"
+path = "src/main.rs"
+
+[features]
+default = []
+http = ["dep:reqwest"]
+
+[dependencies]
+anyhow.workspace = true
+async-trait.workspace = true
+clap.workspace = true
+crossterm.workspace = true
+futures.workspace = true
+ratatui.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+rh-core.workspace = true
+rh-session.workspace = true
+rh-agent.workspace = true
+rh-tool.workspace = true
+rh-tools.workspace = true
+reqwest = { version = "0.12", optional = true, default-features = false, features = ["json", "rustls-tls"] }

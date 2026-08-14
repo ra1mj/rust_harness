@@ -1,0 +1,10 @@
+[package]
+name = "rh-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "rh-core: plugin host — shared context, typed services, typed events, reversible effects"
+
+[dependencies]
+anyhow.workspace = true
