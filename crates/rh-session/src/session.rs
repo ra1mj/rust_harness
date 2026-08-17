@@ -1,8 +1,10 @@
-//! Session event log, projection, and store.
+//! Session event log, projection, tasks, and store (with persistence + export).
 
 use std::collections::HashMap;
+use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
 
+use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -108,6 +110,42 @@ pub enum SessionEvent {
     },
 }
 
+/// A user- or agent-created task in the session's todo list.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct TaskItem {
+    pub id: String,
+    pub title: String,
+    #[serde(default)]
+    pub done: bool,
+}
+
+/// Lightweight metadata for listing sessions.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SessionMeta {
+    pub id: String,
+    pub title: String,
+    pub created_at: u64,
+    pub event_count: usize,
+    pub task_count: usize,
+}
+
+/// The on-disk shape of a session.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SessionRecord {
+    pub id: String,
+    pub title: String,
+    pub created_at: u64,
+    pub events: Vec<SessionEvent>,
+    pub tasks: Vec<TaskItem>,
+}
+
+fn now_millis() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0)
+}
+
 /// An append-only session.
 ///
 /// Cheap to clone; clones share the same log. Appending a durable event
@@ -119,22 +157,85 @@ pub struct Session {
     events: Arc<RwLock<Vec<SessionEvent>>>,
     sink: Option<Context>,
     live: tokio::sync::broadcast::Sender<SessionEvent>,
+    title: Arc<RwLock<String>>,
+    tasks: Arc<RwLock<Vec<TaskItem>>>,
+    created_at: u64,
 }
 
 impl Session {
-    /// Create a new, empty session.
+    /// Create a new, empty session with the default title.
     pub fn new(id: impl Into<String>, sink: Option<Context>) -> Arc<Self> {
+        Self::with_title(id, "新会话".to_string(), sink)
+    }
+
+    /// Create a new, empty session with the given title.
+    pub fn with_title(id: impl Into<String>, title: String, sink: Option<Context>) -> Arc<Self> {
         let (live, _) = tokio::sync::broadcast::channel(256);
         Arc::new(Self {
             id: id.into(),
             events: Arc::new(RwLock::new(Vec::new())),
             sink,
             live,
+            title: Arc::new(RwLock::new(title)),
+            tasks: Arc::new(RwLock::new(Vec::new())),
+            created_at: now_millis(),
+        })
+    }
+
+    /// Rebuild a session from a persisted record.
+    pub fn from_record(record: SessionRecord, sink: Option<Context>) -> Arc<Self> {
+        let (live, _) = tokio::sync::broadcast::channel(256);
+        Arc::new(Self {
+            id: record.id,
+            events: Arc::new(RwLock::new(record.events)),
+            sink,
+            live,
+            title: Arc::new(RwLock::new(record.title)),
+            tasks: Arc::new(RwLock::new(record.tasks)),
+            created_at: record.created_at,
         })
     }
 
     pub fn id(&self) -> &str {
         &self.id
+    }
+
+    pub fn title(&self) -> String {
+        self.title.read().expect("title poisoned").clone()
+    }
+
+    pub fn set_title(&self, title: impl Into<String>) {
+        *self.title.write().expect("title poisoned") = title.into();
+    }
+
+    pub fn created_at(&self) -> u64 {
+        self.created_at
+    }
+
+    pub fn tasks(&self) -> Vec<TaskItem> {
+        self.tasks.read().expect("tasks poisoned").clone()
+    }
+
+    /// Add a task, returning the new item.
+    pub fn add_task(&self, title: impl Into<String>) -> TaskItem {
+        let item = TaskItem {
+            id: next_id(IdKind::Task),
+            title: title.into(),
+            done: false,
+        };
+        self.tasks.write().expect("tasks poisoned").push(item.clone());
+        item
+    }
+
+    /// Mark a task done/undone.
+    pub fn set_task_done(&self, id: &str, done: bool) -> bool {
+        let mut tasks = self.tasks.write().expect("tasks poisoned");
+        if let Some(item) = tasks.iter_mut().find(|t| t.id == id) {
+            item.done = done;
+            true
+        } else {
+            false
+        }
     }
 
     /// Subscribe to this session's live event stream (e.g. for a WebSocket).
@@ -164,6 +265,75 @@ impl Session {
 
     pub fn is_empty(&self) -> bool {
         self.len() == 0
+    }
+
+    pub fn meta(&self) -> SessionMeta {
+        SessionMeta {
+            id: self.id.clone(),
+            title: self.title(),
+            created_at: self.created_at,
+            event_count: self.len(),
+            task_count: self.tasks.read().expect("tasks poisoned").len(),
+        }
+    }
+
+    pub fn to_record(&self) -> SessionRecord {
+        SessionRecord {
+            id: self.id.clone(),
+            title: self.title(),
+            created_at: self.created_at,
+            events: self.events(),
+            tasks: self.tasks(),
+        }
+    }
+
+    /// Serialize the full session (log + tasks + metadata) as pretty JSON.
+    pub fn to_json(&self) -> Result<String> {
+        Ok(serde_json::to_string_pretty(&self.to_record())?)
+    }
+
+    /// Render the transcript as human-readable Markdown.
+    pub fn to_markdown(&self) -> String {
+        let mut out = String::new();
+        out.push_str(&format!("# {}\n\n", self.title()));
+        for event in self.events() {
+            match event {
+                SessionEvent::UserMessage { content, .. } => {
+                    let text = text_of(&content);
+                    if !text.is_empty() {
+                        out.push_str(&format!("**你**：{}\n\n", text));
+                    }
+                }
+                SessionEvent::AssistantMessage { content, .. } => {
+                    let text = text_of(&content);
+                    if !text.is_empty() {
+                        out.push_str(&format!("**助手**：{}\n\n", text));
+                    }
+                }
+                SessionEvent::ToolCall {
+                    tool_name,
+                    arguments,
+                    ..
+                } => {
+                    out.push_str(&format!("**工具调用** `{tool_name}`：`{arguments}`\n"));
+                }
+                SessionEvent::ToolResult {
+                    output, is_error, ..
+                } => {
+                    let mark = if is_error { "✗" } else { "✓" };
+                    out.push_str(&format!("  {mark} 结果：`{output}`\n\n"));
+                }
+                _ => {}
+            }
+        }
+        if !self.tasks().is_empty() {
+            out.push_str("\n## 任务\n\n");
+            for task in self.tasks() {
+                let mark = if task.done { "[x]" } else { "[ ]" };
+                out.push_str(&format!("- {mark} {}\n", task.title));
+            }
+        }
+        out
     }
 
     /// Project model history from the log.
@@ -236,8 +406,22 @@ impl Session {
             events: Arc::new(RwLock::new(self.events())),
             sink: self.sink.clone(),
             live,
+            title: Arc::new(RwLock::new(self.title())),
+            tasks: Arc::new(RwLock::new(self.tasks())),
+            created_at: now_millis(),
         })
     }
+}
+
+fn text_of(content: &[ContentBlock]) -> String {
+    content
+        .iter()
+        .filter_map(|b| match b {
+            ContentBlock::Text { text } => Some(text.clone()),
+            _ => None,
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 fn push_tool_call(out: &mut Vec<Message>, block: ContentBlock) {
@@ -251,33 +435,70 @@ fn push_tool_call(out: &mut Vec<Message>, block: ContentBlock) {
     });
 }
 
-/// A registry of live sessions.
+/// A registry of sessions, optionally persisted to a directory.
 pub struct SessionStore {
     sessions: RwLock<HashMap<SessionId, Arc<Session>>>,
     sink: Option<Context>,
+    dir: Option<PathBuf>,
 }
 
 impl SessionStore {
+    /// An in-memory-only store (no persistence).
     pub fn new(sink: Option<Context>) -> Self {
         Self {
             sessions: RwLock::new(HashMap::new()),
             sink,
+            dir: None,
         }
     }
 
-    /// Create and store a session with a fresh id.
-    pub fn create_fresh(&self) -> Arc<Session> {
-        self.create(next_id(IdKind::Session))
+    /// A store persisted to `dir` (one JSON file per session).
+    pub fn persistent(dir: impl Into<PathBuf>, sink: Option<Context>) -> Self {
+        let store = Self {
+            sessions: RwLock::new(HashMap::new()),
+            sink,
+            dir: Some(dir.into()),
+        };
+        store.load_all();
+        store
     }
 
-    /// Create and store a session with the given id.
-    pub fn create(&self, id: impl Into<String>) -> Arc<Session> {
-        let id = id.into();
-        let session = Session::new(id.clone(), self.sink.clone());
+    fn load_all(&self) {
+        let Some(dir) = &self.dir else { return };
+        let Ok(entries) = std::fs::read_dir(dir) else {
+            return;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.extension().and_then(|e| e.to_str()) != Some("json") {
+                continue;
+            }
+            if let Ok(text) = std::fs::read_to_string(&path) {
+                if let Ok(record) = serde_json::from_str::<SessionRecord>(&text) {
+                    let session = Session::from_record(record, self.sink.clone());
+                    self.sessions
+                        .write()
+                        .expect("session store poisoned")
+                        .insert(session.id().to_string(), session);
+                }
+            }
+        }
+    }
+
+    /// Create and store a session with a fresh id and the default title.
+    pub fn create_fresh(&self) -> Arc<Session> {
+        self.create("新会话")
+    }
+
+    /// Create and store a session with a fresh id and the given title.
+    pub fn create(&self, title: impl Into<String>) -> Arc<Session> {
+        let id = next_id(IdKind::Session);
+        let session = Session::with_title(id.clone(), title.into(), self.sink.clone());
         self.sessions
             .write()
             .expect("session store poisoned")
             .insert(id, Arc::clone(&session));
+        let _ = self.save(&session);
         session
     }
 
@@ -288,6 +509,47 @@ impl SessionStore {
             .expect("session store poisoned")
             .get(id)
             .cloned()
+    }
+
+    /// All sessions, oldest first.
+    pub fn list(&self) -> Vec<SessionMeta> {
+        let mut metas: Vec<SessionMeta> = self
+            .sessions
+            .read()
+            .expect("session store poisoned")
+            .values()
+            .map(|s| s.meta())
+            .collect();
+        metas.sort_by_key(|m| m.created_at);
+        metas
+    }
+
+    /// Rename a session.
+    pub fn rename(&self, id: &str, title: impl Into<String>) -> Result<()> {
+        let session = self
+            .get(id)
+            .ok_or_else(|| anyhow!("session {id} not found"))?;
+        session.set_title(title);
+        self.save(&session)
+    }
+
+    /// Delete a session (from memory and disk).
+    pub fn remove(&self, id: &str) -> Result<()> {
+        let removed = self.sessions.write().expect("session store poisoned").remove(id);
+        if let Some(session) = removed {
+            if let Some(dir) = &self.dir {
+                let _ = std::fs::remove_file(dir.join(format!("{}.json", session.id())));
+            }
+        }
+        Ok(())
+    }
+
+    /// Persist a session (no-op for the in-memory store).
+    pub fn save(&self, session: &Session) -> Result<()> {
+        let Some(dir) = &self.dir else { return Ok(()) };
+        std::fs::create_dir_all(dir)?;
+        std::fs::write(dir.join(format!("{}.json", session.id())), session.to_json()?)?;
+        Ok(())
     }
 }
 
@@ -359,5 +621,57 @@ mod tests {
         let fork = session.fork("b");
         assert_eq!(fork.id(), "b");
         assert_eq!(fork.len(), 1);
+    }
+
+    #[test]
+    fn tasks_and_export() {
+        let session = Session::new("t", None);
+        session.add_task("写文档");
+        let item = session.add_task("写测试");
+        session.set_task_done(&item.id, true);
+        assert_eq!(session.tasks().len(), 2);
+
+        session.append(SessionEvent::UserMessage {
+            message_id: "m1".into(),
+            content: vec![ContentBlock::Text {
+                text: "你好".into(),
+            }],
+        });
+
+        let md = session.to_markdown();
+        assert!(md.contains("**你**：你好"));
+        assert!(md.contains("- [x] 写测试"));
+
+        let json = session.to_json().unwrap();
+        assert!(json.contains("\"tasks\""));
+    }
+
+    #[test]
+    fn persistent_store_roundtrip() {
+        let dir = std::env::temp_dir().join(format!("rh-session-test-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        {
+            let store = SessionStore::persistent(&dir, None);
+            let session = store.create("我的会话");
+            session.add_task("任务一");
+            session.append(SessionEvent::UserMessage {
+                message_id: "m1".into(),
+                content: vec![ContentBlock::Text {
+                    text: "hi".into(),
+                }],
+            });
+            store.save(&session).unwrap();
+        }
+        {
+            let store = SessionStore::persistent(&dir, None);
+            let metas = store.list();
+            assert_eq!(metas.len(), 1);
+            assert_eq!(metas[0].title, "我的会话");
+            let session = store.get(&metas[0].id).unwrap();
+            assert_eq!(session.len(), 1);
+            assert_eq!(session.tasks().len(), 1);
+            store.remove(&metas[0].id).unwrap();
+        }
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

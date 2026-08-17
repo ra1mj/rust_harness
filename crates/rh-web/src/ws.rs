@@ -4,10 +4,11 @@
 //! active model, so switching models in the settings takes effect on the
 //! next message without reconnecting.
 
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
-use axum::extract::State;
+use axum::extract::{Query, State};
 use axum::response::Response;
 use futures::{SinkExt, StreamExt};
 use serde_json::json;
@@ -18,11 +19,16 @@ use rh_session::{Session, SessionStore};
 
 use crate::AppState;
 
-pub async fn upgrade(ws: WebSocketUpgrade, State(state): State<AppState>) -> Response {
-    ws.on_upgrade(move |socket| handle(socket, state))
+pub async fn upgrade(
+    ws: WebSocketUpgrade,
+    Query(params): Query<HashMap<String, String>>,
+    State(state): State<AppState>,
+) -> Response {
+    let session_id = params.get("session").cloned();
+    ws.on_upgrade(move |socket| handle(socket, state, session_id))
 }
 
-async fn handle(socket: WebSocket, state: AppState) {
+async fn handle(socket: WebSocket, state: AppState, session_id: Option<String>) {
     let (mut sender, mut receiver) = socket.split();
 
     let store = match state.ctx.service::<SessionStore>() {
@@ -38,7 +44,11 @@ async fn handle(socket: WebSocket, state: AppState) {
             return;
         }
     };
-    let session = store.create_fresh();
+    // Attach to the requested session, or start a fresh one.
+    let session = match session_id {
+        Some(id) => store.get(&id).unwrap_or_else(|| store.create("新会话")),
+        None => store.create("新会话"),
+    };
 
     let _ = sender
         .send(Message::Text(
@@ -98,7 +108,16 @@ async fn handle(socket: WebSocket, state: AppState) {
                         let state = state.clone();
                         let done_tx = done_tx.clone();
                         tokio::spawn(async move {
-                            let result = run_turn(&state, session, &input).await.map_err(|e| e.to_string());
+                            // Auto-title an untitled session from its first message.
+                            if session.title() == "新会话" {
+                                let title: String = input.chars().take(30).collect();
+                                session.set_title(if title.trim().is_empty() { "新会话".to_string() } else { title });
+                            }
+                            let result = run_turn(&state, session.clone(), &input).await.map_err(|e| e.to_string());
+                            // Persist the transcript after the turn settles.
+                            if let Some(store) = state.ctx.service::<SessionStore>() {
+                                let _ = store.save(&session);
+                            }
                             let _ = done_tx.send(result);
                         });
                     }

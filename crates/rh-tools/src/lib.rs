@@ -19,4 +19,4 @@ mod tools;
 
 pub use fs::{FileSystem, FileSystemPlugin, LocalFileSystem};
 pub use shell::{CommandOutput, LocalShell, Shell, ShellPlugin};
-pub use tools::{BashTool, FsReadTool, FsWriteTool, TodoList, TodoWriteTool, ToolsPlugin};
+pub use tools::{BashTool, FsReadTool, FsWriteTool, TodoWriteTool, ToolsPlugin};

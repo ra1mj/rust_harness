@@ -37,226 +37,94 @@
     -moz-osx-font-smoothing: grayscale;
     color: var(--ds-text);
     background: var(--ds-bg);
-    display: flex;
-    height: 100%;
-    overflow: hidden;
+    display: flex; height: 100%; overflow: hidden;
   }
   button, input, select, textarea { font-family: inherit; }
 
-  /* ---------- Sidebar ---------- */
   aside {
-    width: 260px;
-    flex: none;
-    background: var(--ds-sidebar);
+    width: 272px; flex: none; background: var(--ds-sidebar);
     border-right: 1px solid var(--ds-border);
-    display: flex;
-    flex-direction: column;
-    min-height: 0;
+    display: flex; flex-direction: column; min-height: 0;
   }
-  .side-head {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 14px 16px 10px;
-  }
-  .logo {
-    width: 30px; height: 30px; flex: none; border-radius: 9px;
-    display: grid; place-items: center; font-size: 17px;
-    background: linear-gradient(135deg, #4d8dff, #4176e6);
-    color: #fff;
-    box-shadow: 0 2px 8px rgba(65, 118, 230, 0.35);
-  }
-  .side-head .title { font-weight: 600; font-size: 15px; letter-spacing: .2px; }
+  .side-head { display: flex; align-items: center; gap: 10px; padding: 14px 16px 10px; }
+  .logo { width: 30px; height: 30px; flex: none; border-radius: 9px; display: grid; place-items: center; font-size: 17px; background: linear-gradient(135deg, #4d8dff, #4176e6); color: #fff; box-shadow: 0 2px 8px rgba(65,118,230,.35); }
+  .side-head .title { font-weight: 600; font-size: 15px; }
   .side-head .sub { font-size: 11px; color: var(--ds-caption); }
-
-  .new-session {
-    margin: 6px 12px;
-    display: flex; align-items: center; gap: 8px;
-    border: 1px solid var(--ds-border);
-    background: var(--ds-bg);
-    color: var(--ds-text);
-    border-radius: 10px;
-    padding: 8px 12px;
-    font-size: 13px; font-weight: 500;
-    cursor: pointer;
-    transition: border-color .15s var(--ds-ease);
-  }
+  .new-session { margin: 6px 12px; display: flex; align-items: center; gap: 8px; border: 1px solid var(--ds-border); background: var(--ds-bg); color: var(--ds-text); border-radius: 10px; padding: 8px 12px; font-size: 13px; font-weight: 500; cursor: pointer; }
   .new-session:hover { border-color: var(--ds-brand); color: var(--ds-brand); }
-
   .side-scroll { flex: 1; overflow-y: auto; padding: 8px 12px; min-height: 0; }
-  .side-label {
-    font-size: 11px; text-transform: uppercase; letter-spacing: .8px;
-    color: var(--ds-caption); padding: 8px 4px 6px;
-  }
-  .session-item {
-    display: flex; align-items: center; gap: 8px;
-    padding: 8px 10px; border-radius: 8px; cursor: pointer;
-    color: var(--ds-text-secondary); font-size: 13px;
-  }
+  .side-label { font-size: 11px; text-transform: uppercase; letter-spacing: .8px; color: var(--ds-caption); padding: 10px 4px 6px; display: flex; align-items: center; justify-content: space-between; }
+  .side-label .mini { text-transform: none; letter-spacing: 0; font-size: 12px; color: var(--ds-brand); cursor: pointer; border: none; background: none; padding: 0; }
+  .side-label .mini:hover { text-decoration: underline; }
+
+  .session-item { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 8px; cursor: pointer; color: var(--ds-text-secondary); font-size: 13px; }
   .session-item.active { background: #e8effd; color: var(--ds-brand); font-weight: 500; }
   .session-item:hover:not(.active) { background: var(--ds-hover); }
-  .session-item .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ds-brand); flex: none; }
+  .session-item .ttl { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .session-item .x { display: none; border: none; background: none; color: var(--ds-caption); cursor: pointer; font-size: 15px; line-height: 1; padding: 0 2px; }
+  .session-item:hover .x { display: block; }
+  .session-item .x:hover { color: var(--ds-error); }
 
-  .side-foot {
-    border-top: 1px solid var(--ds-border);
-    padding: 10px 12px;
-    display: flex; flex-direction: column; gap: 4px;
-  }
-  .side-foot button {
-    display: flex; align-items: center; gap: 9px;
-    background: none; border: none; color: var(--ds-text-secondary);
-    font-size: 13px; padding: 8px 10px; border-radius: 8px; cursor: pointer; text-align: left;
-  }
+  .task-item { display: flex; align-items: flex-start; gap: 8px; padding: 5px 6px; border-radius: 6px; font-size: 13px; color: var(--ds-text-secondary); }
+  .task-item:hover { background: var(--ds-hover); }
+  .task-item input[type=checkbox] { margin-top: 3px; accent-color: var(--ds-brand); }
+  .task-item .done { text-decoration: line-through; color: var(--ds-caption); }
+  .add-task { display: flex; gap: 6px; margin-top: 4px; }
+  .add-task input { flex: 1; min-width: 0; border: 1px solid var(--ds-border); border-radius: 8px; padding: 5px 9px; font-size: 12.5px; background: var(--ds-bg); color: var(--ds-text); outline: none; }
+  .add-task input:focus { border-color: var(--ds-brand); }
+  .add-task button { border: none; background: var(--ds-brand); color: #fff; border-radius: 8px; padding: 0 12px; font-size: 13px; cursor: pointer; }
+
+  .side-foot { border-top: 1px solid var(--ds-border); padding: 10px 12px; display: flex; flex-direction: column; gap: 4px; }
+  .side-foot button { display: flex; align-items: center; gap: 9px; background: none; border: none; color: var(--ds-text-secondary); font-size: 13px; padding: 8px 10px; border-radius: 8px; cursor: pointer; text-align: left; }
   .side-foot button:hover { background: var(--ds-hover); color: var(--ds-text); }
   .side-foot .status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ds-caption); flex: none; }
   .side-foot .status-dot.on { background: var(--ds-success); }
   .side-foot .status-dot.working { background: var(--ds-brand); animation: pulse 1s infinite; }
   @keyframes pulse { 50% { opacity: .35; } }
+  .export-row { display: flex; gap: 6px; padding: 4px 10px; }
+  .export-row button { flex: 1; justify-content: center; border: 1px solid var(--ds-border); border-radius: 8px; padding: 6px 0; }
 
-  /* ---------- Main / chat ---------- */
   main { flex: 1; display: flex; flex-direction: column; min-width: 0; background: var(--ds-bg); position: relative; }
-
-  .hero {
-    position: absolute; inset: 0; display: flex; flex-direction: column;
-    align-items: center; justify-content: center; gap: 10px;
-    padding: 24px; pointer-events: none;
-    transition: opacity .2s var(--ds-ease);
-  }
+  .hero { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 24px; pointer-events: none; transition: opacity .2s var(--ds-ease); }
   .hero.hidden { opacity: 0; }
-  .hero .glow {
-    width: 120px; height: 120px; border-radius: 50%;
-    background: radial-gradient(circle, rgba(77, 141, 255, 0.18), rgba(77, 141, 255, 0) 70%);
-    display: grid; place-items: center;
-  }
-  .hero .mark {
-    width: 64px; height: 64px; border-radius: 18px;
-    display: grid; place-items: center; font-size: 34px;
-    background: linear-gradient(135deg, #4d8dff, #4176e6);
-    color: #fff;
-    box-shadow: 0 8px 28px rgba(65, 118, 230, 0.35);
-  }
-  .hero h1 { margin: 6px 0 0; font-size: 22px; font-weight: 600; letter-spacing: .2px; }
+  .hero .glow { width: 120px; height: 120px; border-radius: 50%; background: radial-gradient(circle, rgba(77,141,255,.18), rgba(77,141,255,0) 70%); display: grid; place-items: center; }
+  .hero .mark { width: 64px; height: 64px; border-radius: 18px; display: grid; place-items: center; font-size: 34px; background: linear-gradient(135deg, #4d8dff, #4176e6); color: #fff; box-shadow: 0 8px 28px rgba(65,118,230,.35); }
+  .hero h1 { margin: 6px 0 0; font-size: 22px; font-weight: 600; }
   .hero p { margin: 0; font-size: 13px; color: var(--ds-caption); }
 
-  #transcript {
-    flex: 1; overflow-y: auto; min-height: 0;
-    padding: 24px 16px;
-  }
-  .column {
-    max-width: var(--ds-chat-width); width: 100%; margin: 0 auto;
-    display: flex; flex-direction: column; gap: 18px;
-  }
+  #transcript { flex: 1; overflow-y: auto; min-height: 0; padding: 24px 16px; }
+  .column { max-width: var(--ds-chat-width); width: 100%; margin: 0 auto; display: flex; flex-direction: column; gap: 18px; }
   .turn-sep { display: flex; align-items: center; gap: 12px; color: var(--ds-caption); font-size: 11px; margin: 4px 0; }
   .turn-sep::before, .turn-sep::after { content: ""; flex: 1; height: 1px; background: var(--ds-border); }
-
-  /* user bubble: right aligned */
   .msg-user { display: flex; justify-content: flex-end; }
-  .msg-user .bubble {
-    max-width: min(525px, 82%);
-    background: var(--ds-bubble);
-    border-radius: 22px;
-    padding: 10px 16px;
-    font-size: 16px; line-height: 24px;
-    white-space: pre-wrap; word-break: break-word;
-  }
-
-  /* assistant: left aligned, avatar + plain text */
+  .msg-user .bubble { max-width: min(525px, 82%); background: var(--ds-bubble); border-radius: 22px; padding: 10px 16px; font-size: 16px; line-height: 24px; white-space: pre-wrap; word-break: break-word; }
   .msg-assistant { display: flex; gap: 12px; }
-  .avatar {
-    width: 28px; height: 28px; flex: none; border-radius: 8px;
-    display: grid; place-items: center; font-size: 14px;
-    background: linear-gradient(135deg, #4d8dff, #4176e6); color: #fff;
-    box-shadow: 0 2px 6px rgba(65, 118, 230, 0.3);
-  }
+  .avatar { width: 28px; height: 28px; flex: none; border-radius: 8px; display: grid; place-items: center; font-size: 14px; background: linear-gradient(135deg, #4d8dff, #4176e6); color: #fff; box-shadow: 0 2px 6px rgba(65,118,230,.3); }
   .msg-assistant .body { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 10px; }
   .msg-assistant .text { font-size: 16px; line-height: 26px; white-space: pre-wrap; word-break: break-word; }
-
-  /* tool rows */
   .tool-row { display: flex; flex-direction: column; gap: 8px; }
-  .tool-call {
-    align-self: flex-start;
-    display: inline-flex; align-items: center; gap: 8px;
-    border: 1px solid var(--ds-border);
-    background: var(--ds-sidebar);
-    border-radius: 10px;
-    padding: 6px 12px;
-    font-size: 12.5px; color: var(--ds-text-secondary);
-  }
+  .tool-call { align-self: flex-start; display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--ds-border); background: var(--ds-sidebar); border-radius: 10px; padding: 6px 12px; font-size: 12.5px; color: var(--ds-text-secondary); }
   .tool-call .name { font-family: var(--ds-mono); color: var(--ds-brand); font-weight: 600; }
-  .tool-result {
-    border-left: 2px solid var(--ds-border);
-    padding: 2px 0 2px 12px;
-    font-family: var(--ds-mono); font-size: 12.5px; line-height: 19px;
-    color: var(--ds-text-secondary);
-    white-space: pre-wrap; word-break: break-word;
-    max-width: 100%;
-  }
+  .tool-result { border-left: 2px solid var(--ds-border); padding: 2px 0 2px 12px; font-family: var(--ds-mono); font-size: 12.5px; line-height: 19px; color: var(--ds-text-secondary); white-space: pre-wrap; word-break: break-word; }
   .tool-result.error { border-left-color: var(--ds-error); }
   .tool-result .ok { color: var(--ds-success); }
   .tool-result .err { color: var(--ds-error); }
-  .working-line { font-size: 13px; color: var(--ds-brand); display: inline-flex; gap: 6px; align-items: center; }
 
-  /* ---------- Composer ---------- */
-  .composer {
-    flex: none;
-    display: flex; flex-direction: column; align-items: center;
-    padding: 8px 16px 16px;
-  }
-  .card {
-    box-sizing: border-box;
-    display: flex; flex-direction: column; gap: 10px;
-    width: 100%; max-width: var(--ds-composer-width);
-    border: 1px solid var(--ds-border-strong);
-    border-radius: 22px;
-    background: var(--ds-bg);
-    box-shadow: var(--ds-shadow);
-    padding: 10px 10px 6px;
-  }
-  .card textarea {
-    width: 100%; resize: none; border: none; outline: none;
-    background: transparent; color: var(--ds-text);
-    font-size: 16px; line-height: 24px;
-    padding: 4px 12px 0 16px;
-    min-height: 30px; max-height: 200px;
-  }
+  .composer { flex: none; display: flex; flex-direction: column; align-items: center; padding: 8px 16px 16px; }
+  .card { box-sizing: border-box; display: flex; flex-direction: column; gap: 10px; width: 100%; max-width: var(--ds-composer-width); border: 1px solid var(--ds-border-strong); border-radius: 22px; background: var(--ds-bg); box-shadow: var(--ds-shadow); padding: 10px 10px 6px; }
+  .card textarea { width: 100%; resize: none; border: none; outline: none; background: transparent; color: var(--ds-text); font-size: 16px; line-height: 24px; padding: 4px 12px 0 16px; min-height: 30px; max-height: 200px; }
   .card textarea::placeholder { color: var(--ds-caption); }
-  .card .row {
-    display: flex; align-items: center; justify-content: space-between; gap: 12px;
-    padding: 2px 8px 4px;
-  }
-  .model-select {
-    appearance: none; -webkit-appearance: none;
-    max-width: 260px; height: 28px;
-    padding: 0 22px 0 10px;
-    border: none; border-radius: 8px; outline: none;
-    background-color: transparent;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12' fill='none'%3E%3Cpath d='M3 4.5L6 7.5L9 4.5' stroke='%2381858C' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
-    background-repeat: no-repeat; background-position: right 6px center;
-    color: var(--ds-text-secondary); font-size: 13px; font-weight: 500;
-    cursor: pointer; text-overflow: ellipsis;
-  }
+  .card .row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 2px 8px 4px; }
+  .model-select { appearance: none; -webkit-appearance: none; max-width: 260px; height: 28px; padding: 0 22px 0 10px; border: none; border-radius: 8px; outline: none; background-color: transparent; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12' fill='none'%3E%3Cpath d='M3 4.5L6 7.5L9 4.5' stroke='%2381858C' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 6px center; color: var(--ds-text-secondary); font-size: 13px; font-weight: 500; cursor: pointer; text-overflow: ellipsis; }
   .model-select:hover { background-color: var(--ds-hover); }
-  .send {
-    display: grid; place-items: center;
-    width: 34px; height: 34px; flex: none;
-    border: none; border-radius: 999px;
-    background: var(--ds-send); color: #fff;
-    cursor: pointer;
-    transition: background-color .1s ease, opacity .1s ease;
-  }
+  .send { display: grid; place-items: center; width: 34px; height: 34px; flex: none; border: none; border-radius: 999px; background: var(--ds-send); color: #fff; cursor: pointer; transition: background-color .1s ease, opacity .1s ease; }
   .send:hover:not(:disabled) { background: var(--ds-brand-hover); }
   .send:disabled { opacity: 0.4; cursor: default; }
   .composer-hint { font-size: 11px; color: var(--ds-caption); margin-top: 8px; }
 
-  /* ---------- Modal ---------- */
-  .overlay { position: fixed; inset: 0; background: rgba(15, 17, 21, 0.35); backdrop-filter: blur(2px); display: flex; align-items: center; justify-content: center; z-index: 30; }
+  .overlay { position: fixed; inset: 0; background: rgba(15,17,21,.35); backdrop-filter: blur(2px); display: flex; align-items: center; justify-content: center; z-index: 30; }
   .overlay.hidden { display: none; }
-  .modal {
-    width: 640px; max-width: 94vw; max-height: 86vh; overflow-y: auto;
-    background: var(--ds-bg); border: 1px solid var(--ds-border); border-radius: 16px;
-    box-shadow: 0 24px 60px rgba(15, 17, 21, 0.18);
-    padding: 20px 22px;
-  }
+  .modal { width: 640px; max-width: 94vw; max-height: 86vh; overflow-y: auto; background: var(--ds-bg); border: 1px solid var(--ds-border); border-radius: 16px; box-shadow: 0 24px 60px rgba(15,17,21,.18); padding: 20px 22px; }
   .modal h2 { margin: 0 0 4px; font-size: 17px; font-weight: 600; }
   .modal .desc { margin: 0 0 16px; font-size: 12.5px; color: var(--ds-caption); }
   .provider { border: 1px solid var(--ds-border); border-radius: 12px; padding: 12px 14px; margin-bottom: 12px; }
@@ -266,11 +134,7 @@
   .provider .head .url { font-size: 12px; color: var(--ds-caption); font-family: var(--ds-mono); word-break: break-all; }
   .badge { font-size: 11px; color: var(--ds-brand); border: 1px solid var(--ds-brand); border-radius: 999px; padding: 1px 9px; flex: none; }
   .models { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
-  .model-chip {
-    font-size: 12px; border: 1px solid var(--ds-border); border-radius: 999px;
-    padding: 3px 11px; cursor: pointer; color: var(--ds-text-secondary);
-    background: var(--ds-bg); font-family: var(--ds-mono);
-  }
+  .model-chip { font-size: 12px; border: 1px solid var(--ds-border); border-radius: 999px; padding: 3px 11px; cursor: pointer; color: var(--ds-text-secondary); background: var(--ds-bg); font-family: var(--ds-mono); }
   .model-chip:hover { border-color: var(--ds-brand); color: var(--ds-brand); }
   .model-chip.active { border-color: var(--ds-brand); color: var(--ds-brand); background: #eef4ff; }
   .hint { font-size: 12px; color: var(--ds-caption); margin-top: 8px; }
@@ -292,23 +156,23 @@
   <aside>
     <div class="side-head">
       <div class="logo">🐋</div>
-      <div>
-        <div class="title">Rust Harness</div>
-        <div class="sub">多模型 · 工具调用</div>
-      </div>
+      <div><div class="title">Rust Harness</div><div class="sub">多模型 · 工具调用</div></div>
     </div>
     <button class="new-session" id="newSession">＋ 新会话</button>
     <div class="side-scroll">
       <div class="side-label">会话</div>
-      <div id="sessionList">
-        <div class="session-item active"><span class="dot"></span><span id="sessionTitle">当前会话</span></div>
-      </div>
+      <div id="sessionList"></div>
+      <div class="side-label">任务 <button class="mini" id="taskAddBtn" style="display:none">＋</button></div>
+      <div id="taskList"><div class="hint">暂无任务</div></div>
+      <div class="add-task"><input id="taskInput" placeholder="添加任务…" /><button id="taskAdd">加</button></div>
       <div class="side-label">工具</div>
       <div id="toolsSide"></div>
     </div>
     <div class="side-foot">
-      <div style="display:flex;align-items:center;gap:9px;padding:6px 10px;color:var(--ds-caption);font-size:12px;">
-        <span class="status-dot" id="dot"></span><span id="statusText">连接中…</span>
+      <div style="display:flex;align-items:center;gap:9px;padding:6px 10px;color:var(--ds-caption);font-size:12px;"><span class="status-dot" id="dot"></span><span id="statusText">连接中…</span></div>
+      <div class="export-row">
+        <button id="exportMd">导出 Markdown</button>
+        <button id="exportJson">导出 JSON</button>
       </div>
       <button id="settingsBtn">⚙ 模型设置</button>
     </div>
@@ -320,9 +184,7 @@
       <h1>有什么可以帮你？</h1>
       <p>Rust Harness · 实时流式 · 工具调用 · 多模型</p>
     </div>
-
     <div id="transcript"><div class="column" id="column"></div></div>
-
     <div class="composer">
       <div class="card">
         <textarea id="input" placeholder="给 Rust Harness 发送消息…" rows="1"></textarea>
@@ -366,8 +228,13 @@
   const overlay = document.getElementById('overlay');
   const providerList = document.getElementById('providerList');
   const addForm = document.getElementById('addForm');
+  const sessionList = document.getElementById('sessionList');
+  const taskList = document.getElementById('taskList');
+  const taskInput = document.getElementById('taskInput');
 
-  let ws, currentAssistant = null, working = false, hasMessages = false, providersData = { providers: [], models: {}, active: {} };
+  let ws, currentAssistant = null, working = false, hasMessages = false;
+  let currentSessionId = null;
+  let providersData = { providers: [], models: {}, active: {} };
 
   function el(tag, cls, text) { const n = document.createElement(tag); if (cls) n.className = cls; if (text !== undefined) n.textContent = text; return n; }
   function setStatus(s, t) { dot.className = 'status-dot ' + s; statusText.textContent = t; }
@@ -375,11 +242,7 @@
   function setHero(show) { hero.classList.toggle('hidden', !show); }
   function scrollBottom() { transcript.scrollTop = transcript.scrollHeight; }
   function textFromContent(c) { return Array.isArray(c) ? c.filter(b => b.kind === 'text').map(b => b.text).join('\n') : ''; }
-
-  function showMessage() {
-    if (!hasMessages) { hasMessages = true; setHero(false); }
-  }
-
+  function showMessage() { if (!hasMessages) { hasMessages = true; setHero(false); } }
   function addRow(node) { column.appendChild(node); scrollBottom(); showMessage(); }
 
   function ensureAssistant() {
@@ -388,56 +251,24 @@
     row.appendChild(el('div', 'avatar', '🐋'));
     const body = el('div', 'body');
     const text = el('div', 'text', '');
-    body.appendChild(text);
-    row.appendChild(body);
-    addRow(row);
+    body.appendChild(text); row.appendChild(body); addRow(row);
     currentAssistant = { text };
     return currentAssistant;
   }
 
   function renderEvent(ev) {
     switch (ev.type) {
-      case 'user_message': {
-        const row = el('div', 'msg-user');
-        row.appendChild(el('div', 'bubble', textFromContent(ev.content)));
-        addRow(row); currentAssistant = null; break;
-      }
+      case 'user_message': { const row = el('div', 'msg-user'); row.appendChild(el('div', 'bubble', textFromContent(ev.content))); addRow(row); currentAssistant = null; break; }
       case 'assistant_chunk': { ensureAssistant().text.textContent += ev.text; scrollBottom(); break; }
-      case 'assistant_message': {
-        const text = textFromContent(ev.content);
-        if (currentAssistant) { if (text && !currentAssistant.text.textContent) currentAssistant.text.textContent = text; currentAssistant = null; }
-        else if (text) { ensureAssistant().text.textContent = text; currentAssistant = null; }
-        break;
-      }
-      case 'tool_call': {
-        const row = el('div', 'msg-assistant');
-        row.appendChild(el('div', 'avatar', '⚙'));
-        const body = el('div', 'body');
-        const chip = el('div', 'tool-call');
-        chip.appendChild(el('span', 'name', ev.tool_name));
-        chip.appendChild(document.createTextNode(' ' + JSON.stringify(ev.arguments || {})));
-        body.appendChild(chip);
-        row.appendChild(body);
-        addRow(row); currentAssistant = null; break;
-      }
-      case 'tool_result': {
-        const row = el('div', 'msg-assistant');
-        row.appendChild(el('div', 'avatar', '⚙'));
-        const body = el('div', 'body');
-        const res = el('div', 'tool-result' + (ev.is_error ? ' error' : ''));
-        res.appendChild(el('span', ev.is_error ? 'err' : 'ok', ev.is_error ? '✗ ' : '✓ '));
-        let out; try { out = typeof ev.output === 'string' ? ev.output : JSON.stringify(ev.output); } catch (e) { out = String(ev.output); }
-        if (out.length > 900) out = out.slice(0, 900) + '…';
-        res.appendChild(document.createTextNode(out));
-        body.appendChild(res);
-        row.appendChild(body);
-        addRow(row); break;
-      }
+      case 'assistant_message': { const text = textFromContent(ev.content); if (currentAssistant) { if (text && !currentAssistant.text.textContent) currentAssistant.text.textContent = text; currentAssistant = null; } else if (text) { ensureAssistant().text.textContent = text; currentAssistant = null; } break; }
+      case 'tool_call': { const row = el('div', 'msg-assistant'); row.appendChild(el('div', 'avatar', '⚙')); const body = el('div', 'body'); const chip = el('div', 'tool-call'); chip.appendChild(el('span', 'name', ev.tool_name)); chip.appendChild(document.createTextNode(' ' + JSON.stringify(ev.arguments || {}))); body.appendChild(chip); row.appendChild(body); addRow(row); currentAssistant = null; break; }
+      case 'tool_result': { const row = el('div', 'msg-assistant'); row.appendChild(el('div', 'avatar', '⚙')); const body = el('div', 'body'); const res = el('div', 'tool-result' + (ev.is_error ? ' error' : '')); res.appendChild(el('span', ev.is_error ? 'err' : 'ok', ev.is_error ? '✗ ' : '✓ ')); let out; try { out = typeof ev.output === 'string' ? ev.output : JSON.stringify(ev.output); } catch (e) { out = String(ev.output); } if (out.length > 900) out = out.slice(0, 900) + '…'; res.appendChild(document.createTextNode(out)); body.appendChild(res); row.appendChild(body); addRow(row); break; }
       case 'turn_start': { addRow(el('div', 'turn-sep', '新回合')); break; }
-      case 'turn_end': { break; }
       default: break;
     }
   }
+
+  function clearTranscript() { column.textContent = ''; currentAssistant = null; hasMessages = false; setHero(true); }
 
   function send() {
     const text = input.value.trim();
@@ -449,48 +280,129 @@
 
   function connect() {
     const proto = location.protocol === 'https:' ? 'wss://' : 'ws://';
-    ws = new WebSocket(proto + location.host + '/ws');
+    const qs = currentSessionId ? '?session=' + encodeURIComponent(currentSessionId) : '';
+    ws = new WebSocket(proto + location.host + '/ws' + qs);
     ws.onopen = () => { setStatus('on', '已连接'); setWorking(false); };
     ws.onclose = () => { setStatus('', '已断开，重连中…'); setTimeout(connect, 1500); };
     ws.onerror = () => setStatus('', '连接错误');
     ws.onmessage = (e) => {
       let data; try { data = JSON.parse(e.data); } catch (err) { return; }
-      if (data.type === 'hello') { document.getElementById('sessionTitle').textContent = '会话 ' + data.session_id; return; }
-      if (data.type === 'error') {
-        const row = el('div', 'msg-assistant');
-        row.appendChild(el('div', 'avatar', '✗'));
-        const body = el('div', 'body');
-        const res = el('div', 'tool-result error', '错误：' + data.error);
-        body.appendChild(res); row.appendChild(body); addRow(row);
-        setWorking(false);
+      if (data.type === 'hello') {
+        if (data.session_id !== currentSessionId) { currentSessionId = data.session_id; loadSessions(); loadTasks(); }
         return;
       }
-      if (data.type === 'turn_end') { setWorking(false); }
+      if (data.type === 'error') {
+        const row = el('div', 'msg-assistant'); row.appendChild(el('div', 'avatar', '✗'));
+        const body = el('div', 'body'); const res = el('div', 'tool-result error', '错误：' + data.error);
+        body.appendChild(res); row.appendChild(body); addRow(row); setWorking(false); return;
+      }
+      if (data.type === 'turn_end') { setWorking(false); loadTasks(); }
       renderEvent(data);
     };
   }
 
+  // ---------- sessions ----------
+  async function loadSessions() {
+    let data; try { data = await (await fetch('/api/sessions')).json(); } catch (err) { return; }
+    renderSessions(data.sessions || []);
+  }
+  function renderSessions(sessions) {
+    sessionList.textContent = '';
+    sessions.forEach(s => {
+      const item = el('div', 'session-item' + (s.id === currentSessionId ? ' active' : ''));
+      item.appendChild(el('span', 'ttl', s.title || '新会话'));
+      const x = el('button', 'x', '×');
+      x.onclick = (e) => { e.stopPropagation(); deleteSession(s.id); };
+      item.appendChild(x);
+      item.onclick = () => switchSession(s.id);
+      item.ondblclick = () => renameSessionPrompt(s.id, s.title);
+      sessionList.appendChild(item);
+    });
+  }
+  async function switchSession(id) {
+    currentSessionId = id;
+    clearTranscript();
+    try {
+      const rec = await (await fetch('/api/sessions/' + encodeURIComponent(id))).json();
+      (rec.events || []).forEach(renderEvent);
+    } catch (err) {}
+    loadSessions(); loadTasks();
+    if (ws) ws.close(); else connect();
+  }
+  async function newSession() {
+    let data; try { data = await (await fetch('/api/sessions', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) })).json(); } catch (err) { return; }
+    const id = data.created; loadSessions();
+    currentSessionId = id; clearTranscript(); loadTasks();
+    if (ws) ws.close(); else connect();
+  }
+  async function renameSessionPrompt(id, old) {
+    const title = prompt('重命名会话', old);
+    if (!title || title === old) return;
+    await fetch('/api/sessions/' + encodeURIComponent(id), { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title }) });
+    loadSessions();
+  }
+  async function deleteSession(id) {
+    if (!confirm('删除该会话？')) return;
+    await fetch('/api/sessions/' + encodeURIComponent(id), { method: 'DELETE' });
+    if (id === currentSessionId) {
+      let data; try { data = await (await fetch('/api/sessions')).json(); } catch (err) { data = { sessions: [] }; }
+      const sessions = data.sessions || [];
+      if (sessions.length) switchSession(sessions[sessions.length - 1].id);
+      else { currentSessionId = null; clearTranscript(); loadTasks(); if (ws) ws.close(); }
+    }
+    loadSessions();
+  }
+
+  // ---------- tasks ----------
+  async function loadTasks() {
+    if (!currentSessionId) { taskList.textContent = ''; taskList.appendChild(el('div', 'hint', '暂无任务')); return; }
+    let data; try { data = await (await fetch('/api/sessions/' + encodeURIComponent(currentSessionId) + '/tasks')).json(); } catch (err) { return; }
+    renderTasks(data.tasks || []);
+  }
+  function renderTasks(tasks) {
+    taskList.textContent = '';
+    if (!tasks.length) { taskList.appendChild(el('div', 'hint', '暂无任务')); return; }
+    tasks.forEach(t => {
+      const item = el('div', 'task-item');
+      const cb = document.createElement('input'); cb.type = 'checkbox'; cb.checked = t.done;
+      cb.onchange = () => toggleTask(t.id, cb.checked);
+      item.appendChild(cb);
+      const lbl = el('span', t.done ? 'done' : '', t.title);
+      item.appendChild(lbl);
+      taskList.appendChild(item);
+    });
+  }
+  async function addTask(title) {
+    if (!currentSessionId || !title) return;
+    await fetch('/api/sessions/' + encodeURIComponent(currentSessionId) + '/tasks', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title }) });
+    loadTasks();
+  }
+  async function toggleTask(taskId, done) {
+    if (!currentSessionId) return;
+    await fetch('/api/sessions/' + encodeURIComponent(currentSessionId) + '/tasks/' + encodeURIComponent(taskId), { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ done }) });
+    loadTasks();
+  }
+
+  // ---------- export ----------
+  function download(url) { const a = document.createElement('a'); a.href = url; a.download = ''; document.body.appendChild(a); a.click(); a.remove(); }
+  document.getElementById('exportMd').onclick = () => { if (currentSessionId) download('/api/sessions/' + encodeURIComponent(currentSessionId) + '/export?format=markdown'); };
+  document.getElementById('exportJson').onclick = () => { if (currentSessionId) download('/api/sessions/' + encodeURIComponent(currentSessionId) + '/export?format=json'); };
+
+  // ---------- meta ----------
   async function loadMeta() {
     try {
-      const [tRes, cRes] = await Promise.all([fetch('/api/tools'), fetch('/api/config')]);
-      const tools = await tRes.json(); const config = await cRes.json();
+      const [tRes] = await Promise.all([fetch('/api/tools')]);
+      const tools = await tRes.json();
       const side = document.getElementById('toolsSide'); side.textContent = '';
-      (tools.tools || []).forEach(t => {
-        const d = el('div', 'session-item');
-        d.appendChild(el('span', '', '•'));
-        d.appendChild(el('span', '', t.name));
-        d.title = t.description;
-        side.appendChild(d);
-      });
+      (tools.tools || []).forEach(t => { const d = el('div', 'session-item'); d.appendChild(el('span', '', '•')); d.appendChild(el('span', '', t.name)); d.title = t.description; side.appendChild(d); });
     } catch (err) {}
   }
 
+  // ---------- providers ----------
   async function loadProviders() {
     try { providersData = await (await fetch('/api/providers')).json(); } catch (err) { return; }
-    renderProviders();
-    renderModelSelect();
+    renderProviders(); renderModelSelect();
   }
-
   function renderProviders() {
     providerList.textContent = '';
     const { providers, models, active } = providersData;
@@ -499,82 +411,63 @@
       const box = el('div', 'provider');
       const head = el('div', 'head');
       const info = el('div', 'info');
-      info.appendChild(el('div', 'name', p.name));
-      info.appendChild(el('div', 'url', p.base_url));
+      info.appendChild(el('div', 'name', p.name)); info.appendChild(el('div', 'url', p.base_url));
       head.appendChild(info);
       if (active.provider === p.id) head.appendChild(el('span', 'badge', '使用中'));
-      const discover = el('button', 'small', '发现模型'); discover.onclick = () => discoverModels(p.id);
-      head.appendChild(discover);
-      const del = el('button', 'small danger', '删除'); del.onclick = () => removeProvider(p.id);
-      head.appendChild(del);
+      const discover = el('button', 'small', '发现模型'); discover.onclick = () => discoverModels(p.id); head.appendChild(discover);
+      const del = el('button', 'small danger', '删除'); del.onclick = () => removeProvider(p.id); head.appendChild(del);
       box.appendChild(head);
       const chips = el('div', 'models');
       const list = models[p.id] || [];
       if (!list.length) box.appendChild(el('div', 'hint', '尚未发现模型，点击「发现模型」。'));
-      list.forEach(m => {
-        const c = el('div', 'model-chip' + (active.provider === p.id && active.model === m.id ? ' active' : ''), m.id);
-        c.onclick = () => selectModel(p.id, m.id);
-        chips.appendChild(c);
-      });
-      box.appendChild(chips);
-      providerList.appendChild(box);
+      list.forEach(m => { const c = el('div', 'model-chip' + (active.provider === p.id && active.model === m.id ? ' active' : ''), m.id); c.onclick = () => selectModel(p.id, m.id); chips.appendChild(c); });
+      box.appendChild(chips); providerList.appendChild(box);
     });
   }
-
   function renderModelSelect() {
     const { providers, models, active } = providersData;
     modelSelect.textContent = '';
     if (!providers.length) { modelSelect.appendChild(new Option('未配置模型', '')); modelSelect.disabled = true; return; }
     modelSelect.disabled = false;
-    providers.forEach(p => {
-      const g = document.createElement('optgroup'); g.label = p.name;
-      (models[p.id] || []).forEach(m => {
-        const o = new Option(m.id, p.id + '||' + m.id);
-        o.selected = (active.provider === p.id && active.model === m.id);
-        g.appendChild(o);
-      });
-      modelSelect.appendChild(g);
-    });
+    providers.forEach(p => { const g = document.createElement('optgroup'); g.label = p.name; (models[p.id] || []).forEach(m => { const o = new Option(m.id, p.id + '||' + m.id); o.selected = (active.provider === p.id && active.model === m.id); g.appendChild(o); }); modelSelect.appendChild(g); });
   }
-
   async function discoverModels(id) { await fetch('/api/providers/' + encodeURIComponent(id) + '/discover', { method: 'POST' }); loadProviders(); }
   async function removeProvider(id) { if (!confirm('删除该 Provider？')) return; await fetch('/api/providers/' + encodeURIComponent(id), { method: 'DELETE' }); loadProviders(); }
-  async function selectModel(provider, model) {
-    await fetch('/api/active', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ provider, model }) });
-    loadProviders();
-  }
+  async function selectModel(provider, model) { await fetch('/api/active', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ provider, model }) }); loadProviders(); }
 
-  modelSelect.addEventListener('change', () => {
-    const v = modelSelect.value;
-    if (!v) return;
-    const [provider, model] = v.split('||');
-    selectModel(provider, model);
-  });
+  modelSelect.addEventListener('change', () => { const v = modelSelect.value; if (!v) return; const [provider, model] = v.split('||'); selectModel(provider, model); });
+  addForm.addEventListener('submit', async (e) => { e.preventDefault(); const f = new FormData(addForm); await fetch('/api/providers', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: '', name: f.get('name'), base_url: f.get('base_url'), api_key: f.get('api_key') }) }); addForm.reset(); loadProviders(); });
 
-  addForm.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const f = new FormData(addForm);
-    await fetch('/api/providers', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: '', name: f.get('name'), base_url: f.get('base_url'), api_key: f.get('api_key') })
-    });
-    addForm.reset(); loadProviders();
-  });
-
-  function newSession() {
-    column.textContent = ''; currentAssistant = null; hasMessages = false; setHero(true);
-    if (ws) ws.close(); connect();
-  }
-
+  // ---------- wiring ----------
   document.getElementById('newSession').onclick = newSession;
   document.getElementById('settingsBtn').onclick = () => { overlay.classList.remove('hidden'); loadProviders(); };
   document.getElementById('closeBtn').onclick = () => overlay.classList.add('hidden');
   overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.classList.add('hidden'); });
+  document.getElementById('taskAdd').onclick = () => { addTask(taskInput.value.trim()); taskInput.value = ''; };
+  taskInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { addTask(taskInput.value.trim()); taskInput.value = ''; } });
   sendBtn.addEventListener('click', send);
   input.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } });
   input.addEventListener('input', () => { input.style.height = 'auto'; input.style.height = Math.min(input.scrollHeight, 200) + 'px'; });
 
-  loadMeta(); loadProviders(); connect(); setHero(true);
+  // ---------- boot ----------
+  (async function boot() {
+    loadMeta(); loadProviders();
+    let data; try { data = await (await fetch('/api/sessions')).json(); } catch (err) { data = { sessions: [] }; }
+    const sessions = data.sessions || [];
+    if (!sessions.length) {
+      const created = await (await fetch('/api/sessions', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) })).json();
+      currentSessionId = created.created;
+    } else {
+      currentSessionId = sessions[sessions.length - 1].id;
+    }
+    loadSessions();
+    try {
+      const rec = await (await fetch('/api/sessions/' + encodeURIComponent(currentSessionId))).json();
+      (rec.events || []).forEach(renderEvent);
+    } catch (err) {}
+    loadTasks();
+    connect();
+  })();
 })();
 </script>
 </body>

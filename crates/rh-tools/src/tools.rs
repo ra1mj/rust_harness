@@ -1,41 +1,16 @@
 //! Built-in tools (the Consumer role) and the tool registry plugin.
 
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 
 use async_trait::async_trait;
 use serde_json::{json, Value};
 
 use rh_core::{Context, Disposers, Plugin};
-use rh_tool::{
-    Tool, ToolCallContext, ToolDescription, ToolError, ToolId, ToolRegistry,
-};
+use rh_session::SessionStore;
+use rh_tool::{Tool, ToolCallContext, ToolDescription, ToolError, ToolId, ToolRegistry};
 
 use crate::fs::FileSystem;
 use crate::shell::Shell;
-
-/// An in-memory todo list, shared behind a service so tools and future
-/// plugins see the same state.
-pub struct TodoList {
-    items: RwLock<Vec<String>>,
-}
-
-impl TodoList {
-    pub fn new() -> Arc<Self> {
-        Arc::new(Self {
-            items: RwLock::new(Vec::new()),
-        })
-    }
-
-    pub fn add(&self, title: String) -> usize {
-        let mut items = self.items.write().expect("todo list poisoned");
-        items.push(title);
-        items.len() - 1
-    }
-
-    pub fn list(&self) -> Vec<String> {
-        self.items.read().expect("todo list poisoned").clone()
-    }
-}
 
 /// Runs a shell command via the [`Shell`] service.
 pub struct BashTool;
@@ -151,7 +126,7 @@ impl Tool for FsWriteTool {
     }
 }
 
-/// Appends a todo to the shared [`TodoList`].
+/// Appends a todo to the current session's task list.
 pub struct TodoWriteTool;
 
 #[async_trait]
@@ -163,7 +138,7 @@ impl Tool for TodoWriteTool {
     fn description(&self) -> ToolDescription {
         ToolDescription::new(
             "todo_write",
-            "Append a todo item to the shared todo list and return the list.",
+            "Append a task to the current session's todo list and return the list.",
             json!({
                 "type": "object",
                 "properties": {
@@ -179,13 +154,19 @@ impl Tool for TodoWriteTool {
             .get("title")
             .and_then(Value::as_str)
             .ok_or_else(|| ToolError::execution("missing `title` argument"))?;
-        let todos = ctx.service::<TodoList>("TodoList")?;
-        let index = todos.add(title.to_string());
-        Ok(json!({ "index": index, "todos": todos.list() }))
+        let store = ctx.service::<SessionStore>("SessionStore")?;
+        let session = store
+            .get(&ctx.session_id)
+            .ok_or_else(|| ToolError::execution("session not found"))?;
+        let item = session.add_task(title.to_string());
+        store
+            .save(&session)
+            .map_err(|e| ToolError::execution(e.to_string()))?;
+        Ok(json!({ "id": item.id, "todos": session.tasks() }))
     }
 }
 
-/// Mounts the tool registry, the todo list service, and the built-in tools.
+/// Mounts the tool registry and the built-in tools.
 pub struct ToolsPlugin;
 
 impl Plugin for ToolsPlugin {
@@ -198,8 +179,6 @@ impl Plugin for ToolsPlugin {
 
         let registry = Arc::new(ToolRegistry::new());
         disposers.push(ctx.provide_named("ToolRegistry", registry.clone()));
-
-        disposers.push(ctx.provide_named("TodoList", TodoList::new()));
 
         let tools: Vec<Arc<dyn Tool>> = vec![
             Arc::new(BashTool),

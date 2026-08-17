@@ -1059,6 +1059,7 @@ dependencies = [
  "anyhow",
  "async-trait",
  "rh-core",
+ "rh-session",
  "rh-tool",
  "serde",
  "serde_json",

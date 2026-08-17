@@ -12,6 +12,7 @@ pub enum IdKind {
     Turn,
     Step,
     ToolCall,
+    Task,
 }
 
 impl IdKind {
@@ -22,6 +23,7 @@ impl IdKind {
             IdKind::Turn => "turn",
             IdKind::Step => "step",
             IdKind::ToolCall => "call",
+            IdKind::Task => "task",
         }
     }
 }

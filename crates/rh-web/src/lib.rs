@@ -1,26 +1,28 @@
 //! rh-web — the browser front end for the harness.
 //!
-//! Serves a single-page app and a WebSocket that streams a session's live
-//! [`SessionEvent`]s. Each WebSocket connection owns its own session; typing
-//! a task drives one turn and streams the transcript back in real time.
-//! Providers and models are managed at runtime via the `/api/providers` /
-//! `/api/active` endpoints (backed by [`ModelHub`]).
+//! Serves a single-page app, a WebSocket that streams a session's live
+//! [`SessionEvent`]s, and REST endpoints for workspace management: sessions
+//! (create/switch/rename/delete/export), tasks, and model providers.
 
 mod ws;
 
+use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use axum::extract::{Path, State};
+use axum::body::Body;
+use axum::extract::{Path, Query, State};
+use axum::http::header;
 use axum::http::StatusCode;
-use axum::response::Html;
-use axum::routing::{delete, get, post};
+use axum::response::{Html, Response};
+use axum::routing::{delete, get, patch, post};
 use axum::{Json, Router};
 use serde_json::{json, Value};
 
 use rh_core::Context;
 use rh_providers::{ModelHub, ProviderConfig};
+use rh_session::{SessionStore, TaskItem};
 use rh_tool::{ToolCallContext, ToolRegistry};
 
 const INDEX: &str = include_str!("index.html");
@@ -39,7 +41,13 @@ pub async fn serve(
     plugins: Vec<String>,
     addr: SocketAddr,
     models_file: PathBuf,
+    data_dir: PathBuf,
 ) -> anyhow::Result<()> {
+    // Replace the in-memory session store with a persistent one (one JSON
+    // file per session under `data_dir`). Held for the server lifetime.
+    let store = Arc::new(SessionStore::persistent(data_dir, Some(ctx.clone())));
+    let _store_registration = ctx.provide_named("SessionStore", store);
+
     let state = AppState {
         ctx,
         plugins,
@@ -54,6 +62,14 @@ pub async fn serve(
         .route("/api/providers/{id}/discover", post(discover_models))
         .route("/api/providers/{id}", delete(remove_provider))
         .route("/api/active", post(set_active))
+        .route("/api/sessions", get(list_sessions).post(create_session))
+        .route(
+            "/api/sessions/{id}",
+            get(get_session).patch(rename_session).delete(delete_session),
+        )
+        .route("/api/sessions/{id}/export", get(export_session))
+        .route("/api/sessions/{id}/tasks", get(list_tasks).post(add_task))
+        .route("/api/sessions/{id}/tasks/{task_id}", patch(set_task_done))
         .route("/ws", get(ws::upgrade))
         .with_state(state);
 
@@ -61,6 +77,13 @@ pub async fn serve(
     println!("rh web listening on http://{addr}");
     axum::serve(listener, app).await?;
     Ok(())
+}
+
+fn store(state: &AppState) -> Arc<SessionStore> {
+    state
+        .ctx
+        .service::<SessionStore>()
+        .expect("no session store registered")
 }
 
 async fn index() -> Html<&'static str> {
@@ -105,7 +128,8 @@ async fn config(State(state): State<AppState>) -> Json<Value> {
     }))
 }
 
-/// The full hub state: providers, their models, and the active pair.
+// ---------- model providers ----------
+
 fn hub_state(hub: &ModelHub) -> Value {
     let providers = hub.providers();
     let mut models = serde_json::Map::new();
@@ -178,4 +202,139 @@ async fn set_active(
         .set_active(provider, model)
         .map(|_| Json(hub_state(&state.hub)))
         .map_err(|err| (StatusCode::BAD_REQUEST, err.to_string()))
+}
+
+// ---------- sessions ----------
+
+async fn list_sessions(State(state): State<AppState>) -> Json<Value> {
+    Json(json!({ "sessions": store(&state).list() }))
+}
+
+async fn create_session(
+    State(state): State<AppState>,
+    Json(body): Json<Value>,
+) -> Json<Value> {
+    let title = body
+        .get("title")
+        .and_then(Value::as_str)
+        .unwrap_or("新会话");
+    let session = store(&state).create(title);
+    Json(json!({ "sessions": store(&state).list(), "created": session.id() }))
+}
+
+async fn get_session(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> Result<Json<Value>, (StatusCode, String)> {
+    let session = store(&state)
+        .get(&id)
+        .ok_or_else(|| (StatusCode::NOT_FOUND, "session not found".to_string()))?;
+    Ok(Json(json!(session.to_record())))
+}
+
+async fn rename_session(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    Json(body): Json<Value>,
+) -> Result<Json<Value>, (StatusCode, String)> {
+    let title = body
+        .get("title")
+        .and_then(Value::as_str)
+        .ok_or_else(|| (StatusCode::BAD_REQUEST, "缺少 title".to_string()))?;
+    store(&state)
+        .rename(&id, title)
+        .map(|_| Json(json!({ "sessions": store(&state).list() })))
+        .map_err(|err| (StatusCode::NOT_FOUND, err.to_string()))
+}
+
+async fn delete_session(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> Result<Json<Value>, (StatusCode, String)> {
+    store(&state)
+        .remove(&id)
+        .map(|_| Json(json!({ "sessions": store(&state).list() })))
+        .map_err(|err| (StatusCode::NOT_FOUND, err.to_string()))
+}
+
+async fn export_session(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    Query(params): Query<HashMap<String, String>>,
+) -> Result<Response, (StatusCode, String)> {
+    let session = store(&state)
+        .get(&id)
+        .ok_or_else(|| (StatusCode::NOT_FOUND, "session not found".to_string()))?;
+    let format = params.get("format").map(String::as_str).unwrap_or("markdown");
+    match format {
+        "json" => Ok(download(
+            &format!("{}.json", session.id()),
+            session.to_json().map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?,
+            "application/json",
+        )),
+        _ => Ok(download(
+            &format!("{}.md", session.id()),
+            session.to_markdown(),
+            "text/markdown; charset=utf-8",
+        )),
+    }
+}
+
+fn download(filename: &str, content: String, content_type: &str) -> Response {
+    Response::builder()
+        .status(StatusCode::OK)
+        .header(header::CONTENT_TYPE, content_type)
+        .header(
+            header::CONTENT_DISPOSITION,
+            format!("attachment; filename=\"{filename}\""),
+        )
+        .body(Body::from(content))
+        .unwrap_or_else(|_| (StatusCode::INTERNAL_SERVER_ERROR, "body error").into_response())
+}
+
+use axum::response::IntoResponse;
+
+// ---------- tasks ----------
+
+async fn list_tasks(State(state): State<AppState>, Path(id): Path<String>) -> Json<Value> {
+    let tasks: Vec<TaskItem> = store(&state)
+        .get(&id)
+        .map(|s| s.tasks())
+        .unwrap_or_default();
+    Json(json!({ "tasks": tasks }))
+}
+
+async fn add_task(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    Json(body): Json<Value>,
+) -> Result<Json<Value>, (StatusCode, String)> {
+    let title = body
+        .get("title")
+        .and_then(Value::as_str)
+        .ok_or_else(|| (StatusCode::BAD_REQUEST, "缺少 title".to_string()))?;
+    let session = store(&state)
+        .get(&id)
+        .ok_or_else(|| (StatusCode::NOT_FOUND, "session not found".to_string()))?;
+    let item = session.add_task(title);
+    store(&state)
+        .save(&session)
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    Ok(Json(json!({ "tasks": session.tasks(), "added": item.id })))
+}
+
+async fn set_task_done(
+    State(state): State<AppState>,
+    Path((id, task_id)): Path<(String, String)>,
+    Json(body): Json<Value>,
+) -> Result<Json<Value>, (StatusCode, String)> {
+    let done = body.get("done").and_then(Value::as_bool).unwrap_or(false);
+    let session = store(&state)
+        .get(&id)
+        .ok_or_else(|| (StatusCode::NOT_FOUND, "session not found".to_string()))?;
+    session.set_task_done(&task_id, done);
+    store(&state)
+        .save(&session)
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    Ok(Json(json!({ "tasks": session.tasks() })))
 }

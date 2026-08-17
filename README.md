@@ -18,11 +18,11 @@
 # 构建
 cargo build
 
-# Web 界面（中文单页应用 + WebSocket 实时 transcript + 多 Provider/模型管理），浏览器打开 http://127.0.0.1:3080
+# Web 界面（中文单页应用 + WebSocket 实时 transcript + 会话/任务/模型管理），浏览器打开 http://127.0.0.1:3080
 cargo run -- web
 # 换端口：cargo run -- web --addr 127.0.0.1:8080
-# 模型 hub 持久化到指定文件（默认 ./rh-models.json）
-cargo run -- web --models-file ~/.rh/models.json
+# 模型 hub 持久化到指定文件（默认 ./rh-models.json）；会话持久化目录（默认 ./.rh）
+cargo run -- web --models-file ~/.rh/models.json --data-dir ~/.rh/sessions
 
 # headless 跑一条任务（需要 RH_API_KEY）
 cargo run -- run "please use bash to say hello"
@@ -51,16 +51,24 @@ cargo run -- run "..."     # headless 用环境变量
 cargo run -- web           # Web 里还可添加更多 Provider / 发现模型
 ```
 
+### 工作区管理（会话 / 任务 / 导出）
+
+Web 左侧栏支持完整的工作区管理：
+
+- **会话**：`＋ 新会话` 创建；点击切换；双击重命名；悬停 `×` 删除。会话持久化到 `--data-dir`（每个会话一个 JSON 文件），重启后仍在。
+- **任务**：每会话一个 todo 列表，底部输入框添加、勾选完成；agent 的 `todo_write` 工具也写入当前会话任务。
+- **导出**：`导出 Markdown` / `导出 JSON` 下载当前会话 transcript（含任务）。
+
 ## 仓库结构
 
 ```
 crates/
   rh-core/    插件宿主：Context、Plugin、Service、Event、Disposer
   rh-tool/    统一 Tool trait、ToolRegistry、ToolCallContext
-  rh-session/ append-only SessionEvent 日志 + derive_messages 投影 + 每会话广播
+  rh-session/ append-only SessionEvent 日志 + 任务 + 持久化 SessionStore + 导出(Markdown/JSON)
   rh-agent/   流式 ModelProvider seam、AgentBuilder、turn/step loop
-  rh-tools/   能力 seam（Shell/FileSystem）+ bash/fs_read/fs_write/todo_write
-  rh-web/     axum Web 服务（中文 UI）+ WebSocket 实时 transcript + Provider/模型管理
+  rh-tools/   能力 seam（Shell/FileSystem）+ bash/fs_read/fs_write/todo_write（写会话任务）
+  rh-web/     axum Web 服务（中文 UI）+ WebSocket + 会话/任务/导出/模型 REST API
   rh-providers/ LLM 层：OpenAI 兼容 adapter + ModelHub（Provider 注册 + GET /models 发现 + 双键选择）
   rh-cli/     组合根 + CLI（run/tools/dump-config/web）
 ```

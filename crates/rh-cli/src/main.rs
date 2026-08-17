@@ -32,7 +32,7 @@ enum Command {
     Tools,
     /// Print the assembled plugin tree, services, and tools.
     DumpConfig,
-    /// Launch the web UI (single-page app + WebSocket live transcript + model settings).
+    /// Launch the web UI (single-page app + WebSocket live transcript + workspace management).
     Web {
         /// Address to bind.
         #[arg(long, default_value = "127.0.0.1:3080")]
@@ -40,6 +40,9 @@ enum Command {
         /// File the model hub is persisted to.
         #[arg(long, default_value = "rh-models.json")]
         models_file: String,
+        /// Directory sessions are persisted to.
+        #[arg(long, default_value = ".rh")]
+        data_dir: String,
     },
 }
 
@@ -50,7 +53,11 @@ async fn main() -> anyhow::Result<()> {
         Command::Run { task } => run(&task).await,
         Command::Tools => tools().await,
         Command::DumpConfig => dump_config().await,
-        Command::Web { addr, models_file } => {
+        Command::Web {
+            addr,
+            models_file,
+            data_dir,
+        } => {
             let assembled = assemble()?;
             let plugins = assembled.plugins.iter().map(|s| s.to_string()).collect();
             rh_web::serve(
@@ -58,6 +65,7 @@ async fn main() -> anyhow::Result<()> {
                 plugins,
                 addr.parse()?,
                 models_file.into(),
+                data_dir.into(),
             )
             .await
         }
