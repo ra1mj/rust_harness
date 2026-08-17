@@ -8,6 +8,7 @@ members = [
     "crates/rh-tools",
     "crates/rh-cli",
     "crates/rh-web",
+    "crates/rh-providers",
 ]
 
 [workspace.package]
@@ -33,3 +34,4 @@ rh-session = { path = "crates/rh-session" }
 rh-agent = { path = "crates/rh-agent" }
 rh-tools = { path = "crates/rh-tools" }
 rh-web = { path = "crates/rh-web" }
+rh-providers = { path = "crates/rh-providers" }

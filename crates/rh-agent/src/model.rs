@@ -133,6 +133,41 @@ pub enum ModelEvent {
 /// An opaque, pinned stream of [`ModelEvent`]s.
 pub type ModelStream = Pin<Box<dyn Stream<Item = ModelEvent> + Send>>;
 
+/// A user-managed model: a named provider configuration that the web UI can
+/// add, select, and switch between at runtime.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ModelConfig {
+    pub id: String,
+    pub label: String,
+    /// `"mock"` (offline) or `"openai"` (OpenAI-compatible HTTP).
+    #[serde(default = "default_provider")]
+    pub provider: String,
+    #[serde(default)]
+    pub base_url: Option<String>,
+    #[serde(default)]
+    pub api_key: Option<String>,
+    #[serde(default)]
+    pub model: Option<String>,
+}
+
+fn default_provider() -> String {
+    "mock".to_string()
+}
+
+impl ModelConfig {
+    /// The built-in offline demo model.
+    pub fn mock() -> Self {
+        Self {
+            id: "mock".to_string(),
+            label: "Mock（离线演示）".to_string(),
+            provider: "mock".to_string(),
+            base_url: None,
+            api_key: None,
+            model: Some("mock".to_string()),
+        }
+    }
+}
+
 /// The model adapter seam (the "Service Definition" role).
 ///
 /// Register an implementation on the [`Context`] (e.g. [`MockModelProvider`]

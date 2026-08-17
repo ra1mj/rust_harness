@@ -2,22 +2,17 @@
 //!
 //! The CLI is the composition root: it mounts a plugin tree on a shared
 //! [`Context`](rh_core::Context), then either runs one task headlessly,
-//! lists the assembled tools, or dumps the composition.
+//! lists the assembled tools, dumps the composition, or serves the web UI.
 
 use std::sync::Arc;
 
 use clap::{Parser, Subcommand};
 
-use rh_agent::{AgentBuilder, AgentDefinition, MockModelPlugin};
-#[cfg(feature = "http")]
-use rh_agent::ModelProvider;
+use rh_agent::{AgentBuilder, AgentDefinition, MockModelPlugin, ModelProvider};
 use rh_core::{Context, Disposer, Disposers, Plugin};
 use rh_session::{SessionPlugin, SessionStore};
 use rh_tool::{ToolCallContext, ToolRegistry};
 use rh_tools::{FileSystemPlugin, ShellPlugin, ToolsPlugin};
-
-#[cfg(feature = "http")]
-mod http;
 
 #[derive(Parser)]
 #[command(name = "rh", version, about = "A Rust-driven harness agent fusing deepseek-harness and grok-build")]
@@ -32,7 +27,7 @@ enum Command {
     Run {
         /// The task to run.
         task: String,
-        /// Use the real HTTP model provider (requires RH_API_KEY).
+        /// Use the real HTTP model provider from env (RH_API_KEY / RH_BASE_URL / RH_MODEL).
         #[arg(long)]
         http: bool,
     },
@@ -40,14 +35,14 @@ enum Command {
     Tools,
     /// Print the assembled plugin tree, services, and tools.
     DumpConfig,
-    /// Launch the web UI (single-page app + WebSocket live transcript).
+    /// Launch the web UI (single-page app + WebSocket live transcript + model settings).
     Web {
         /// Address to bind.
         #[arg(long, default_value = "127.0.0.1:3080")]
         addr: String,
-        /// Use the real HTTP model provider (requires RH_API_KEY).
-        #[arg(long)]
-        http: bool,
+        /// File the model catalog is persisted to.
+        #[arg(long, default_value = "rh-models.json")]
+        models_file: String,
     },
 }
 
@@ -58,10 +53,16 @@ async fn main() -> anyhow::Result<()> {
         Command::Run { task, http } => run(&task, http).await,
         Command::Tools => tools().await,
         Command::DumpConfig => dump_config().await,
-        Command::Web { addr, http } => {
-            let assembled = assemble(http)?;
+        Command::Web { addr, models_file } => {
+            let assembled = assemble(false)?;
             let plugins = assembled.plugins.iter().map(|s| s.to_string()).collect();
-            rh_web::serve(assembled.ctx.clone(), plugins, addr.parse()?).await
+            rh_web::serve(
+                assembled.ctx.clone(),
+                plugins,
+                addr.parse()?,
+                models_file.into(),
+            )
+            .await
         }
     }
 }
@@ -110,23 +111,15 @@ fn assemble(http: bool) -> anyhow::Result<Assembled> {
     })
 }
 
-/// Replace the mock model provider with the HTTP one (requires the `http`
-/// feature; otherwise this fails with a clear message).
+/// Replace the mock model provider with the env-configured HTTP one.
 fn mount_http_model(ctx: &Context, extra: &mut Vec<Disposer>) -> anyhow::Result<()> {
-    #[cfg(feature = "http")]
-    {
-        let provider = http::OpenAiCompatibleProvider::from_env()?;
-        let disposer = ctx.provide_named("ModelProvider(http)", Arc::new(provider) as Arc<dyn ModelProvider>);
-        extra.push(disposer);
-        Ok(())
-    }
-    #[cfg(not(feature = "http"))]
-    {
-        let _ = (ctx, extra);
-        anyhow::bail!(
-            "the `--http` flag requires the `http` feature; rebuild with `cargo build --features http`"
-        )
-    }
+    let provider = rh_providers::OpenAiCompatibleProvider::from_env()?;
+    let disposer = ctx.provide_named(
+        "ModelProvider(http)",
+        Arc::new(provider) as Arc<dyn ModelProvider>,
+    );
+    extra.push(disposer);
+    Ok(())
 }
 
 async fn run(task: &str, http: bool) -> anyhow::Result<()> {

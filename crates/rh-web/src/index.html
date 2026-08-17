@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="zh-CN">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -23,7 +23,7 @@
   body {
     background: var(--bg);
     color: var(--fg);
-    font: 14px/1.5 -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    font: 14px/1.5 -apple-system, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", Helvetica, Arial, sans-serif;
     display: flex;
     flex-direction: column;
   }
@@ -35,7 +35,7 @@
     background: var(--panel);
     border-bottom: 1px solid var(--border);
   }
-  header .brand { font-weight: 600; letter-spacing: .2px; }
+  header .brand { font-weight: 600; }
   header .brand .rh { color: var(--accent); }
   header .pill {
     font-size: 12px;
@@ -49,6 +49,10 @@
   .dot.on { background: var(--green); }
   .dot.working { background: var(--yellow); animation: pulse 1s infinite; }
   @keyframes pulse { 50% { opacity: .35; } }
+  button.link {
+    background: none; border: none; color: var(--accent); cursor: pointer; font-size: 13px; padding: 4px 8px; border-radius: 6px;
+  }
+  button.link:hover { background: var(--panel-2); }
 
   .layout { flex: 1; display: flex; min-height: 0; }
   aside {
@@ -62,8 +66,8 @@
     gap: 14px;
   }
   aside h3 { margin: 0 0 6px; font-size: 12px; text-transform: uppercase; letter-spacing: .8px; color: var(--muted); }
-  .tool { border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; background: var(--panel-2); }
-  .tool .name { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--accent); }
+  .tool { border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; background: var(--panel-2); margin-bottom: 6px; }
+  .tool .name { font-family: ui-monospace, monospace; color: var(--accent); }
   .tool .desc { color: var(--muted); font-size: 12px; margin-top: 2px; }
   .kv { display: flex; flex-wrap: wrap; gap: 6px; }
   .kv span { font-size: 12px; border: 1px solid var(--border); border-radius: 6px; padding: 1px 8px; color: var(--muted); font-family: ui-monospace, monospace; }
@@ -100,37 +104,70 @@
     outline: none;
   }
   footer input:focus { border-color: var(--accent); }
-  footer button {
+  footer button.primary {
     background: var(--accent);
-    border: none;
-    color: #fff;
-    border-radius: 8px;
-    padding: 0 18px;
-    font-weight: 600;
-    cursor: pointer;
+    border: none; color: #fff; border-radius: 8px; padding: 0 18px; font-weight: 600; cursor: pointer;
   }
-  footer button:disabled { opacity: .5; cursor: default; }
+  footer button.primary:disabled { opacity: .5; cursor: default; }
+
+  /* settings modal */
+  .overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,.55);
+    display: flex; align-items: center; justify-content: center; z-index: 10;
+  }
+  .overlay.hidden { display: none; }
+  .modal {
+    width: 520px; max-width: 92vw; max-height: 86vh; overflow-y: auto;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 20px;
+  }
+  .modal h2 { margin: 0 0 14px; font-size: 16px; }
+  .model-item {
+    display: flex; align-items: center; gap: 10px;
+    border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; background: var(--panel-2);
+  }
+  .model-item.active { border-color: var(--accent); }
+  .model-item .info { flex: 1; min-width: 0; }
+  .model-item .label { font-weight: 600; }
+  .model-item .meta { font-size: 12px; color: var(--muted); font-family: ui-monospace, monospace; word-break: break-all; }
+  .model-item .badge { font-size: 11px; color: var(--accent); border: 1px solid var(--accent); border-radius: 999px; padding: 0 8px; }
+  button.small {
+    background: var(--panel); color: var(--fg); border: 1px solid var(--border);
+    border-radius: 6px; padding: 4px 10px; cursor: pointer; font-size: 12px;
+  }
+  button.small:hover { border-color: var(--accent); }
+  button.small.danger:hover { border-color: var(--red); color: var(--red); }
+
+  form.add { display: flex; flex-direction: column; gap: 10px; margin-top: 16px; border-top: 1px solid var(--border); padding-top: 16px; }
+  form.add h3 { margin: 0; font-size: 13px; }
+  form.add label { font-size: 12px; color: var(--muted); display: flex; flex-direction: column; gap: 4px; }
+  form.add input, form.add select {
+    background: var(--panel-2); border: 1px solid var(--border); border-radius: 6px; color: var(--fg); padding: 8px 10px; font-size: 13px; outline: none;
+  }
+  form.add input:focus, form.add select:focus { border-color: var(--accent); }
+  .hidden { display: none; }
 </style>
 </head>
 <body>
   <header>
     <div class="brand"><span class="rh">rh</span> — Rust Harness Agent</div>
-    <span class="pill" id="session">session: —</span>
-    <div class="status"><span class="dot" id="dot"></span><span id="statusText">connecting…</span></div>
+    <span class="pill" id="session">会话：—</span>
+    <span class="pill" id="activeModel">模型：加载中…</span>
+    <div class="status"><span class="dot" id="dot"></span><span id="statusText">连接中…</span></div>
+    <button class="link" id="settingsBtn">设置</button>
   </header>
 
   <div class="layout">
     <aside>
       <div>
-        <h3>Tools</h3>
-        <div id="tools">loading…</div>
+        <h3>工具</h3>
+        <div id="tools">加载中…</div>
       </div>
       <div>
-        <h3>Plugins</h3>
+        <h3>插件</h3>
         <div class="kv" id="plugins">—</div>
       </div>
       <div>
-        <h3>Services</h3>
+        <h3>服务</h3>
         <div class="kv" id="services">—</div>
       </div>
     </aside>
@@ -138,10 +175,38 @@
     <main>
       <div id="transcript"></div>
       <footer>
-        <input id="input" placeholder="Type a task… (Enter to send)" autocomplete="off" />
-        <button id="send">Send</button>
+        <input id="input" placeholder="输入任务…（回车发送）" autocomplete="off" />
+        <button class="primary" id="send">发送</button>
       </footer>
     </main>
+  </div>
+
+  <div class="overlay hidden" id="overlay">
+    <div class="modal">
+      <h2>模型设置</h2>
+      <div id="modelList">加载中…</div>
+
+      <form class="add" id="addForm">
+        <h3>添加模型</h3>
+        <label>名称<input name="label" placeholder="例如：DeepSeek / GPT / Mock" /></label>
+        <label>类型
+          <select name="provider">
+            <option value="openai">OpenAI 兼容（真实模型）</option>
+            <option value="mock">Mock（离线演示）</option>
+          </select>
+        </label>
+        <div id="openaiFields">
+          <label>Base URL<input name="base_url" placeholder="https://api.deepseek.com" /></label>
+          <label>API Key<input name="api_key" type="password" placeholder="sk-…" /></label>
+          <label>模型 ID<input name="model" placeholder="deepseek-chat" /></label>
+        </div>
+        <button class="primary" type="submit">保存</button>
+      </form>
+
+      <div style="margin-top:14px; text-align:right">
+        <button class="small" id="closeBtn">关闭</button>
+      </div>
+    </div>
   </div>
 
 <script>
@@ -150,44 +215,40 @@
   const input = document.getElementById('input');
   const sendBtn = document.getElementById('send');
   const sessionEl = document.getElementById('session');
+  const activeModelEl = document.getElementById('activeModel');
   const dot = document.getElementById('dot');
   const statusText = document.getElementById('statusText');
+  const overlay = document.getElementById('overlay');
+  const modelList = document.getElementById('modelList');
+  const addForm = document.getElementById('addForm');
 
   let ws;
-  let currentAssistant = null; // { el, text }
+  let currentAssistant = null;
   let working = false;
 
   function setStatus(state, text) {
-    dot.className = 'dot ' + state; // '', 'on', 'working'
+    dot.className = 'dot ' + state;
     statusText.textContent = text;
   }
-
   function scrollBottom() { transcript.scrollTop = transcript.scrollHeight; }
-
   function el(tag, cls, text) {
     const node = document.createElement(tag);
     if (cls) node.className = cls;
     if (text !== undefined) node.textContent = text;
     return node;
   }
-
   function addRow(node) { transcript.appendChild(node); scrollBottom(); }
-
   function textFromContent(content) {
     if (!Array.isArray(content)) return '';
     return content.filter(b => b.kind === 'text').map(b => b.text).join('\n');
   }
 
-  function finalizeAssistant() {
-    if (currentAssistant) { currentAssistant = null; }
-  }
-
   function ensureAssistant() {
     if (currentAssistant) return currentAssistant;
     const row = el('div', 'row');
-    const who = el('div', 'assistant', 'rh');
+    row.appendChild(el('div', 'assistant', '助手'));
     const msg = el('div', 'msg', '');
-    row.appendChild(who); row.appendChild(msg);
+    row.appendChild(msg);
     addRow(row);
     currentAssistant = { el: msg };
     return currentAssistant;
@@ -197,10 +258,10 @@
     switch (ev.type) {
       case 'user_message': {
         const row = el('div', 'row');
-        row.appendChild(el('div', 'you', 'you'));
+        row.appendChild(el('div', 'you', '你'));
         row.appendChild(el('div', 'msg', textFromContent(ev.content)));
         addRow(row);
-        finalizeAssistant();
+        currentAssistant = null;
         break;
       }
       case 'assistant_chunk': {
@@ -228,7 +289,7 @@
         chip.appendChild(args);
         row.appendChild(chip);
         addRow(row);
-        finalizeAssistant();
+        currentAssistant = null;
         break;
       }
       case 'tool_result': {
@@ -242,25 +303,16 @@
         addRow(row);
         break;
       }
-      case 'turn_start': {
-        const sep = el('div', 'sep', 'turn');
-        addRow(sep);
-        setWorking(true);
-        break;
-      }
-      case 'turn_end': {
-        setWorking(false);
-        break;
-      }
-      default:
-        break; // step_start / step_end / etc.
+      case 'turn_start': { addRow(el('div', 'sep', '回合')); setWorking(true); break; }
+      case 'turn_end': { setWorking(false); break; }
+      default: break;
     }
   }
 
   function setWorking(on) {
     working = on;
     sendBtn.disabled = on;
-    setStatus(on ? 'working' : 'on', on ? 'working…' : 'connected');
+    setStatus(on ? 'working' : 'on', on ? '工作中…' : '已连接');
   }
 
   function send() {
@@ -274,20 +326,15 @@
   function connect() {
     const proto = location.protocol === 'https:' ? 'wss://' : 'ws://';
     ws = new WebSocket(proto + location.host + '/ws');
-
-    ws.onopen = () => setStatus('on', 'connected');
-    ws.onclose = () => { setStatus('', 'disconnected — retrying…'); setTimeout(connect, 1500); };
-    ws.onerror = () => setStatus('', 'error');
-
+    ws.onopen = () => setStatus('on', '已连接');
+    ws.onclose = () => { setStatus('', '已断开 — 重连中…'); setTimeout(connect, 1500); };
+    ws.onerror = () => setStatus('', '连接错误');
     ws.onmessage = (e) => {
       let data;
       try { data = JSON.parse(e.data); } catch (err) { return; }
-      if (data.type === 'hello') {
-        sessionEl.textContent = 'session: ' + data.session_id;
-        return;
-      }
+      if (data.type === 'hello') { sessionEl.textContent = '会话：' + data.session_id; return; }
       if (data.type === 'error') {
-        const row = el('div', 'row toolresult error', 'error: ' + data.error);
+        const row = el('div', 'row toolresult error', '错误：' + data.error);
         addRow(row);
         return;
       }
@@ -295,12 +342,12 @@
     };
   }
 
+  // ---- sidebar ----
   async function loadMeta() {
     try {
       const [toolsRes, configRes] = await Promise.all([fetch('/api/tools'), fetch('/api/config')]);
       const tools = await toolsRes.json();
       const config = await configRes.json();
-
       const toolsBox = document.getElementById('tools');
       toolsBox.textContent = '';
       (tools.tools || []).forEach(t => {
@@ -309,23 +356,105 @@
         box.appendChild(el('div', 'desc', t.description));
         toolsBox.appendChild(box);
       });
-
       const plugins = document.getElementById('plugins');
       plugins.textContent = '';
       (config.plugins || []).forEach(p => plugins.appendChild(el('span', '', p)));
-
       const services = document.getElementById('services');
       services.textContent = '';
       (config.services || []).forEach(s => services.appendChild(el('span', '', s)));
+    } catch (err) { /* 非致命 */ }
+  }
+
+  // ---- models ----
+  async function loadModels() {
+    try {
+      const res = await fetch('/api/models');
+      const data = await res.json();
+      renderModels(data.models || [], data.active);
     } catch (err) {
-      // non-fatal: the transcript still works without the sidebar
+      modelList.textContent = '加载模型失败';
     }
   }
+
+  function renderModels(models, active) {
+    modelList.textContent = '';
+    const activeModel = models.find(m => m.id === active);
+    activeModelEl.textContent = '模型：' + (activeModel ? activeModel.label : '—');
+    models.forEach(m => {
+      const item = el('div', 'model-item' + (m.id === active ? ' active' : ''));
+      const info = el('div', 'info');
+      info.appendChild(el('div', 'label', m.label));
+      const meta = m.provider === 'mock'
+        ? 'mock · ' + (m.model || '')
+        : (m.provider + ' · ' + (m.model || '') + ' · ' + (m.base_url || ''));
+      info.appendChild(el('div', 'meta', meta));
+      item.appendChild(info);
+      if (m.id === active) item.appendChild(el('span', 'badge', '使用中'));
+      else {
+        const use = el('button', 'small', '使用');
+        use.onclick = () => selectModel(m.id);
+        item.appendChild(use);
+      }
+      if (m.provider !== 'mock') {
+        const del = el('button', 'small danger', '删除');
+        del.onclick = () => removeModel(m.id);
+        item.appendChild(del);
+      }
+      modelList.appendChild(item);
+    });
+  }
+
+  async function selectModel(id) {
+    await fetch('/api/models/active', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id })
+    });
+    loadModels();
+  }
+
+  async function removeModel(id) {
+    if (!confirm('删除该模型？')) return;
+    await fetch('/api/models/' + encodeURIComponent(id), { method: 'DELETE' });
+    loadModels();
+  }
+
+  addForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const f = new FormData(addForm);
+    const provider = f.get('provider');
+    const body = {
+      id: '',
+      label: f.get('label') || '未命名',
+      provider,
+      base_url: provider === 'openai' ? (f.get('base_url') || null) : null,
+      api_key: provider === 'openai' ? (f.get('api_key') || null) : null,
+      model: provider === 'openai' ? (f.get('model') || null) : 'mock'
+    };
+    await fetch('/api/models', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    addForm.reset();
+    document.getElementById('openaiFields').classList.remove('hidden');
+    loadModels();
+  });
+
+  // provider toggle
+  addForm.provider.addEventListener('change', () => {
+    const isOpenai = addForm.provider.value === 'openai';
+    document.getElementById('openaiFields').classList.toggle('hidden', !isOpenai);
+  });
+
+  // settings modal
+  document.getElementById('settingsBtn').onclick = () => { overlay.classList.remove('hidden'); loadModels(); };
+  document.getElementById('closeBtn').onclick = () => overlay.classList.add('hidden');
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.classList.add('hidden'); });
 
   sendBtn.addEventListener('click', send);
   input.addEventListener('keydown', (e) => { if (e.key === 'Enter') send(); });
 
   loadMeta();
+  loadModels();
   connect();
   input.focus();
 })();

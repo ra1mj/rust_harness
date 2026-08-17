@@ -219,18 +219,33 @@ fn assistant_blocks(text: &str, calls: &[ModelToolCall]) -> Vec<ContentBlock> {
 pub struct AgentBuilder {
     ctx: Context,
     definition: AgentDefinition,
+    model: Option<Arc<dyn ModelProvider>>,
 }
 
 impl AgentBuilder {
     pub fn new(ctx: Context, definition: AgentDefinition) -> Self {
-        Self { ctx, definition }
+        Self {
+            ctx,
+            definition,
+            model: None,
+        }
+    }
+
+    /// Override the model provider resolved from the context (e.g. a
+    /// provider built from a runtime-selected [`ModelConfig`]).
+    pub fn with_model(mut self, model: Arc<dyn ModelProvider>) -> Self {
+        self.model = Some(model);
+        self
     }
 
     pub fn build(self, session: Arc<Session>) -> anyhow::Result<Agent> {
-        let model = self
-            .ctx
-            .service::<dyn ModelProvider>()
-            .ok_or_else(|| anyhow::anyhow!("no model provider registered on the context"))?;
+        let model = match self.model {
+            Some(model) => model,
+            None => self
+                .ctx
+                .service::<dyn ModelProvider>()
+                .ok_or_else(|| anyhow::anyhow!("no model provider registered on the context"))?,
+        };
         let tools = self
             .ctx
             .service::<ToolRegistry>()

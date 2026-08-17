@@ -74,11 +74,15 @@ crates/
 
 ---
 
-## 7. rh-cli：组合根 + TUI
+## 7. rh-cli：组合根 + Web
 
-`assemble()` 按顺序挂载插件树：`session → shell:local → fs:local → tools → model:mock`（或 `model:http`）。
+`assemble()` 按顺序挂载插件树：`session → shell:local → fs:local → tools → model:mock`。
 
-`rh web` 是一个浏览器界面（axum + WebSocket，最接近 dsh）：每个 WebSocket 连接拥有一个独立 `Session`，前端订阅 `Session::subscribe()` 的实时广播，把 agent loop 追加的每个 durable 事实**实时**渲染到 transcript（含模型逐字流式输出 `assistant/chunk`）。`/api/tools`、`/api/config` 提供工具与插件树面板。
+`rh web` 是一个中文浏览器界面（axum + WebSocket，最接近 dsh）：每个 WebSocket 连接拥有一个独立 `Session`，前端订阅 `Session::subscribe()` 的实时广播，把 agent loop 追加的每个 durable 事实**实时**渲染到 transcript（含模型逐字流式输出 `assistant/chunk`）。
+
+- `/api/tools`、`/api/config`：工具与插件树面板。
+- `/api/models`（GET/POST/DELETE）、`/api/models/active`：**在 Web 端增删/切换模型**。模型保存在 `ModelCatalog`（`ModelConfig` 列表 + 当前选中项），持久化到 `--models-file`；每个 turn 用当前选中模型重建 provider（`AgentBuilder::with_model`），所以切换模型对下一条消息立即生效。
+- `ModelConfig.provider` 二选一：`mock`（离线演示）或 `openai`（由 `rh-providers` 提供）。
 
 ```text
 plugins (mount order):   session / shell:local / fs:local / tools / model:mock

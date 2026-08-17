@@ -21,9 +21,11 @@ cargo build
 # 无 key 运行一次任务（mock 模型，会真实执行 bash 工具）
 cargo run -- run "please use bash to say hello"
 
-# Web 界面（单页应用 + WebSocket 实时 transcript），浏览器打开 http://127.0.0.1:3080
+# Web 界面（中文单页应用 + WebSocket 实时 transcript + 模型设置），浏览器打开 http://127.0.0.1:3080
 cargo run -- web
 # 换端口：cargo run -- web --addr 127.0.0.1:8080
+# 模型配置持久化到指定文件（默认 ./rh-models.json）
+cargo run -- web --models-file ~/.rh/models.json
 
 # 列出工具 / 打印组装出的插件树
 cargo run -- tools
@@ -35,15 +37,18 @@ cargo test
 
 ### 接入真实模型（DeepSeek / OpenAI 兼容）
 
+两种方式：
+
+1. **Web 端直接添加**（推荐）：`rh web` 打开后点右上角「设置」，填写名称 / Base URL / API Key / 模型 ID 即可新增并切换模型，配置持久化到 `--models-file`。
+2. **环境变量**：启动前设置，Web 会自动 seed 一个 `DeepSeek` 条目；headless 用 `--http` 直接走环境变量。
+
 ```sh
-# 需要 --features http（引入 reqwest）
 export RH_API_KEY=...            # 必填
 export RH_BASE_URL=https://api.deepseek.com   # 可选，默认 DeepSeek
 export RH_MODEL=deepseek-chat    # 可选
 
-# headless 或 web 都可用真实模型
-cargo run --features http -- run "..." --http
-cargo run --features http -- web --http
+# headless 走真实模型
+cargo run -- run "..." --http
 ```
 
 ## 仓库结构
@@ -55,8 +60,9 @@ crates/
   rh-session/ append-only SessionEvent 日志 + derive_messages 投影 + 每会话广播
   rh-agent/   流式 ModelProvider seam、AgentBuilder、turn/step loop
   rh-tools/   能力 seam（Shell/FileSystem）+ bash/fs_read/fs_write/todo_write
-  rh-web/     axum Web 服务 + WebSocket 实时 transcript + 单页前端
-  rh-cli/     组合根 + CLI（run/tools/dump-config/web）+ 可选 HTTP provider
+  rh-web/     axum Web 服务（中文 UI）+ WebSocket 实时 transcript + 模型增删改选
+  rh-providers/ OpenAI 兼容 HTTP provider（reqwest）
+  rh-cli/     组合根 + CLI（run/tools/dump-config/web）
 ```
 
 ## 设计要点

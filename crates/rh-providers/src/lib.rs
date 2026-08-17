@@ -1,9 +1,4 @@
-//! OpenAI-compatible HTTP model provider (DeepSeek by default).
-//!
-//! Enabled by the `http` cargo feature. Reads:
-//! * `RH_API_KEY` (required)
-//! * `RH_BASE_URL` (default `https://api.deepseek.com`)
-//! * `RH_MODEL` (default `deepseek-chat`)
+//! rh-providers — OpenAI-compatible HTTP model provider.
 //!
 //! The request is non-streaming; the full completion is then re-emitted
 //! through the streaming [`ModelStream`] interface (text chunked for live
@@ -27,17 +22,22 @@ pub struct OpenAiCompatibleProvider {
 }
 
 impl OpenAiCompatibleProvider {
+    pub fn new(base_url: String, api_key: String, model: String) -> Self {
+        Self {
+            base_url,
+            api_key,
+            model,
+            client: reqwest::Client::new(),
+        }
+    }
+
+    /// Build from `RH_API_KEY` / `RH_BASE_URL` / `RH_MODEL` environment vars.
     pub fn from_env() -> anyhow::Result<Self> {
         let api_key = env::var("RH_API_KEY").map_err(|_| anyhow::anyhow!("RH_API_KEY not set"))?;
         let base_url =
             env::var("RH_BASE_URL").unwrap_or_else(|_| "https://api.deepseek.com".to_string());
         let model = env::var("RH_MODEL").unwrap_or_else(|_| "deepseek-chat".to_string());
-        Ok(Self {
-            base_url,
-            api_key,
-            model,
-            client: reqwest::Client::new(),
-        })
+        Ok(Self::new(base_url, api_key, model))
     }
 }
 

@@ -17,3 +17,4 @@ rh-core.workspace = true
 rh-session.workspace = true
 rh-agent.workspace = true
 rh-tool.workspace = true
+rh-providers.workspace = true
