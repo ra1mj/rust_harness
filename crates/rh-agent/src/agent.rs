@@ -40,7 +40,7 @@ impl Default for AgentDefinition {
     fn default() -> Self {
         Self {
             name: "rh-agent".to_string(),
-            model: "mock".to_string(),
+            model: "deepseek-chat".to_string(),
             system_prompt: "You are a harness agent. Call tools when useful.".to_string(),
             tool_ids: Vec::new(),
             max_steps: 8,
@@ -264,11 +264,39 @@ impl AgentBuilder {
 mod tests {
     use super::*;
     use async_trait::async_trait;
-    use crate::model::MockModelProvider;
+    use crate::model::{ModelRole, ModelStream};
     use rh_core::Context;
     use rh_session::{Session, SessionEvent};
     use rh_tool::{Tool, ToolCallContext, ToolDescription, ToolError, ToolId, ToolRegistry};
     use serde_json::{json, Value};
+
+    /// Test-only model provider: emits one `echo` tool call, then a final
+    /// text reply after the tool result.
+    struct TestProvider;
+
+    #[async_trait]
+    impl ModelProvider for TestProvider {
+        async fn stream(&self, request: ModelRequest) -> anyhow::Result<ModelStream> {
+            let after_tool =
+                matches!(request.messages.last().map(|m| m.role), Some(ModelRole::Tool));
+            let events: Vec<ModelEvent> = if after_tool {
+                vec![
+                    ModelEvent::Text("done".to_string()),
+                    ModelEvent::Done(FinishReason::Stop),
+                ]
+            } else {
+                vec![
+                    ModelEvent::ToolCall(ModelToolCall {
+                        id: "c1".to_string(),
+                        name: "echo".to_string(),
+                        arguments: json!({ "text": "hi" }),
+                    }),
+                    ModelEvent::Done(FinishReason::ToolCalls),
+                ]
+            };
+            Ok(Box::pin(futures::stream::iter(events)))
+        }
+    }
 
     struct EchoTool;
 
@@ -302,13 +330,13 @@ mod tests {
         let _registry_registration = ctx.provide(registry.clone());
         let _tool_registration = registry.register(Arc::new(EchoTool));
 
-        let provider: Arc<dyn ModelProvider> = Arc::new(MockModelProvider::default());
+        let provider: Arc<dyn ModelProvider> = Arc::new(TestProvider);
         let _provider_registration = ctx.provide(provider);
 
         let session = Session::new("s", None);
         let definition = AgentDefinition {
             name: "test".into(),
-            model: "mock".into(),
+            model: "test-model".into(),
             system_prompt: "sys".into(),
             tool_ids: vec![],
             max_steps: 4,

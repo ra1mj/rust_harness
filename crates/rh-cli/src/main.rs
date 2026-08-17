@@ -8,8 +8,8 @@ use std::sync::Arc;
 
 use clap::{Parser, Subcommand};
 
-use rh_agent::{AgentBuilder, AgentDefinition, MockModelPlugin, ModelProvider};
-use rh_core::{Context, Disposer, Disposers, Plugin};
+use rh_agent::{AgentBuilder, AgentDefinition};
+use rh_core::{Context, Disposers, Plugin};
 use rh_session::{SessionPlugin, SessionStore};
 use rh_tool::{ToolCallContext, ToolRegistry};
 use rh_tools::{FileSystemPlugin, ShellPlugin, ToolsPlugin};
@@ -23,13 +23,10 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
-    /// Run one task headlessly and print the session transcript.
+    /// Run one task headlessly (requires RH_API_KEY) and print the transcript.
     Run {
         /// The task to run.
         task: String,
-        /// Use the real HTTP model provider from env (RH_API_KEY / RH_BASE_URL / RH_MODEL).
-        #[arg(long)]
-        http: bool,
     },
     /// List the tools the harness assembles.
     Tools,
@@ -40,7 +37,7 @@ enum Command {
         /// Address to bind.
         #[arg(long, default_value = "127.0.0.1:3080")]
         addr: String,
-        /// File the model catalog is persisted to.
+        /// File the model hub is persisted to.
         #[arg(long, default_value = "rh-models.json")]
         models_file: String,
     },
@@ -50,11 +47,11 @@ enum Command {
 async fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
     match cli.command {
-        Command::Run { task, http } => run(&task, http).await,
+        Command::Run { task } => run(&task).await,
         Command::Tools => tools().await,
         Command::DumpConfig => dump_config().await,
         Command::Web { addr, models_file } => {
-            let assembled = assemble(false)?;
+            let assembled = assemble()?;
             let plugins = assembled.plugins.iter().map(|s| s.to_string()).collect();
             rh_web::serve(
                 assembled.ctx.clone(),
@@ -73,57 +70,36 @@ struct Assembled {
     pub(crate) ctx: Context,
     plugins: Vec<&'static str>,
     _disposers: Vec<Disposers>,
-    _extra: Vec<Disposer>,
 }
 
-/// Mount the plugin tree in order. Every part of the harness — session
-/// store, shell, filesystem, tool registry, model — is a plugin; there is
-/// no privileged core to patch.
-fn assemble(http: bool) -> anyhow::Result<Assembled> {
+/// Mount the plugin tree in order. Every part of the harness — session store,
+/// shell, filesystem, tool registry — is a plugin; the model is injected per
+/// request (there is no privileged model path to patch).
+fn assemble() -> anyhow::Result<Assembled> {
     let ctx = Context::new();
-    let mut disposers: Vec<Disposers> = Vec::new();
-    let mut extra: Vec<Disposer> = Vec::new();
-
     let plugins: Vec<Arc<dyn Plugin>> = vec![
         Arc::new(SessionPlugin),
         Arc::new(ShellPlugin),
         Arc::new(FileSystemPlugin),
         Arc::new(ToolsPlugin),
-        Arc::new(MockModelPlugin),
     ];
 
     let mut names = Vec::new();
+    let mut disposers = Vec::new();
     for plugin in plugins {
         names.push(plugin.name());
         disposers.push(plugin.mount(&ctx)?);
-    }
-
-    if http {
-        mount_http_model(&ctx, &mut extra)?;
-        names.push("model:http");
     }
 
     Ok(Assembled {
         ctx,
         plugins: names,
         _disposers: disposers,
-        _extra: extra,
     })
 }
 
-/// Replace the mock model provider with the env-configured HTTP one.
-fn mount_http_model(ctx: &Context, extra: &mut Vec<Disposer>) -> anyhow::Result<()> {
-    let provider = rh_providers::OpenAiCompatibleProvider::from_env()?;
-    let disposer = ctx.provide_named(
-        "ModelProvider(http)",
-        Arc::new(provider) as Arc<dyn ModelProvider>,
-    );
-    extra.push(disposer);
-    Ok(())
-}
-
-async fn run(task: &str, http: bool) -> anyhow::Result<()> {
-    let assembled = assemble(http)?;
+async fn run(task: &str) -> anyhow::Result<()> {
+    let assembled = assemble()?;
     let ctx = assembled.ctx.clone();
 
     let store = ctx
@@ -131,19 +107,20 @@ async fn run(task: &str, http: bool) -> anyhow::Result<()> {
         .ok_or_else(|| anyhow::anyhow!("no session store registered"))?;
     let session = store.create_fresh();
 
+    let provider = rh_providers::OpenAiCompatibleProvider::from_env()?;
+    let model = std::env::var("RH_MODEL").unwrap_or_else(|_| "deepseek-chat".to_string());
+
     let definition = AgentDefinition {
         name: "rh-agent".to_string(),
-        model: if http {
-            std::env::var("RH_MODEL").unwrap_or_else(|_| "deepseek-chat".to_string())
-        } else {
-            "mock".to_string()
-        },
+        model,
         system_prompt: "You are a Rust harness agent. Use tools when useful.".to_string(),
         tool_ids: Vec::new(),
         max_steps: 8,
     };
 
-    let agent = AgentBuilder::new(ctx, definition).build(session)?;
+    let agent = AgentBuilder::new(ctx, definition)
+        .with_model(Arc::new(provider))
+        .build(session)?;
     let report = agent.run(task).await?;
 
     println!("== session transcript ({}) ==", agent.session().id());
@@ -154,7 +131,7 @@ async fn run(task: &str, http: bool) -> anyhow::Result<()> {
 }
 
 async fn tools() -> anyhow::Result<()> {
-    let assembled = assemble(false)?;
+    let assembled = assemble()?;
     let ctx = assembled.ctx;
     let registry = ctx
         .service::<ToolRegistry>()
@@ -167,7 +144,7 @@ async fn tools() -> anyhow::Result<()> {
 }
 
 async fn dump_config() -> anyhow::Result<()> {
-    let assembled = assemble(false)?;
+    let assembled = assemble()?;
     let ctx = assembled.ctx;
 
     println!("plugins (mount order):");

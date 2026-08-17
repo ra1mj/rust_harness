@@ -14,6 +14,6 @@ mod model;
 
 pub use agent::{Agent, AgentBuilder, AgentDefinition, RunReport};
 pub use model::{
-    FinishReason, MockModelPlugin, MockModelProvider, ModelConfig, ModelEvent, ModelMessage,
-    ModelProvider, ModelRequest, ModelRole, ModelStream, ModelToolCall,
+    FinishReason, ModelEvent, ModelMessage, ModelProvider, ModelRequest, ModelRole, ModelStream,
+    ModelToolCall,
 };

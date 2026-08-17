@@ -997,7 +997,6 @@ name = "rh-cli"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "async-trait",
  "clap",
  "rh-agent",
  "rh-core",
@@ -1026,6 +1025,7 @@ dependencies = [
  "futures",
  "reqwest",
  "rh-agent",
+ "serde",
  "serde_json",
 ]
 

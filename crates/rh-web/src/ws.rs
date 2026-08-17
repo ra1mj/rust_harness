@@ -16,7 +16,6 @@ use tokio::sync::mpsc;
 use rh_agent::{AgentBuilder, AgentDefinition};
 use rh_session::{Session, SessionStore};
 
-use crate::model_catalog::build_provider;
 use crate::AppState;
 
 pub async fn upgrade(ws: WebSocketUpgrade, State(state): State<AppState>) -> Response {
@@ -112,16 +111,16 @@ async fn handle(socket: WebSocket, state: AppState) {
     }
 }
 
-/// Run one turn with the catalog's currently-active model.
+/// Run one turn with the hub's currently-active provider + model.
 async fn run_turn(state: &AppState, session: Arc<Session>, input: &str) -> anyhow::Result<()> {
-    let config = state
-        .catalog
+    let (provider_config, model_info) = state
+        .hub
         .active()
-        .ok_or_else(|| anyhow::anyhow!("没有可用的模型，请先在设置里添加"))?;
-    let provider = build_provider(&config)?;
+        .ok_or_else(|| anyhow::anyhow!("没有可用的模型，请先在设置里添加并选择"))?;
+    let provider = state.hub.build_provider_for(&provider_config.id)?;
     let definition = AgentDefinition {
         name: "rh-web".to_string(),
-        model: config.model.clone().unwrap_or_else(|| "mock".to_string()),
+        model: model_info.id.clone(),
         system_prompt: "You are a Rust harness agent. Use tools when useful.".to_string(),
         tool_ids: Vec::new(),
         max_steps: 8,

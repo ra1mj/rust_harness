@@ -15,17 +15,17 @@
 ## 快速开始
 
 ```sh
-# 构建（默认 features，无网络模型依赖）
+# 构建
 cargo build
 
-# 无 key 运行一次任务（mock 模型，会真实执行 bash 工具）
-cargo run -- run "please use bash to say hello"
-
-# Web 界面（中文单页应用 + WebSocket 实时 transcript + 模型设置），浏览器打开 http://127.0.0.1:3080
+# Web 界面（中文单页应用 + WebSocket 实时 transcript + 多 Provider/模型管理），浏览器打开 http://127.0.0.1:3080
 cargo run -- web
 # 换端口：cargo run -- web --addr 127.0.0.1:8080
-# 模型配置持久化到指定文件（默认 ./rh-models.json）
+# 模型 hub 持久化到指定文件（默认 ./rh-models.json）
 cargo run -- web --models-file ~/.rh/models.json
+
+# headless 跑一条任务（需要 RH_API_KEY）
+cargo run -- run "please use bash to say hello"
 
 # 列出工具 / 打印组装出的插件树
 cargo run -- tools
@@ -35,20 +35,20 @@ cargo run -- dump-config
 cargo test
 ```
 
-### 接入真实模型（DeepSeek / OpenAI 兼容）
+### 多模型支持（dsh 式：Provider 路由 + 模型发现）
 
-两种方式：
+借鉴 DeepSeek Harness 的 LLM 层：**adapter 绑定一个 provider 路由（endpoint + key），模型按请求选择**。
 
-1. **Web 端直接添加**（推荐）：`rh web` 打开后点右上角「设置」，填写名称 / Base URL / API Key / 模型 ID 即可新增并切换模型，配置持久化到 `--models-file`。
-2. **环境变量**：启动前设置，Web 会自动 seed 一个 `DeepSeek` 条目；headless 用 `--http` 直接走环境变量。
+1. **Web 端**（推荐）：右上角「设置」→「添加 Provider」（名称 / Base URL / API Key）→ 保存后点「发现模型」（调用 `GET /models`）→ 在模型 chip 里点选即可切换。多个 Provider 可并存，配置持久化到 `--models-file`。
+2. **环境变量**：启动前设置，Web 会自动 seed 一个 `DeepSeek` Provider。
 
 ```sh
-export RH_API_KEY=...            # 必填
-export RH_BASE_URL=https://api.deepseek.com   # 可选，默认 DeepSeek
-export RH_MODEL=deepseek-chat    # 可选
+export RH_API_KEY=...                       # 必填
+export RH_BASE_URL=https://api.deepseek.com  # 可选，默认 DeepSeek
+export RH_MODEL=deepseek-chat                # 可选，headless 的默认模型
 
-# headless 走真实模型
-cargo run -- run "..." --http
+cargo run -- run "..."     # headless 用环境变量
+cargo run -- web           # Web 里还可添加更多 Provider / 发现模型
 ```
 
 ## 仓库结构
@@ -60,8 +60,8 @@ crates/
   rh-session/ append-only SessionEvent 日志 + derive_messages 投影 + 每会话广播
   rh-agent/   流式 ModelProvider seam、AgentBuilder、turn/step loop
   rh-tools/   能力 seam（Shell/FileSystem）+ bash/fs_read/fs_write/todo_write
-  rh-web/     axum Web 服务（中文 UI）+ WebSocket 实时 transcript + 模型增删改选
-  rh-providers/ OpenAI 兼容 HTTP provider（reqwest）
+  rh-web/     axum Web 服务（中文 UI）+ WebSocket 实时 transcript + Provider/模型管理
+  rh-providers/ LLM 层：OpenAI 兼容 adapter + ModelHub（Provider 注册 + GET /models 发现 + 双键选择）
   rh-cli/     组合根 + CLI（run/tools/dump-config/web）
 ```
 
@@ -72,6 +72,7 @@ crates/
 3. **会话日志即真相**：模型请求只由 `session.derive_messages()` 构造，任何模型可见内容都可从日志重建。
 4. **统一工具边界**：所有工具实现一条 `Tool` trait，流式契约 `[Progress*, Terminal]`。
 5. **流式模型输出**：模型 seam 是流式的（`ModelEvent`），loop 边收边记 `assistant/chunk`，Web 前端实时打字。
+6. **多 Provider / 多模型**：`ModelHub` 注册多个 provider 路由，`GET /models` 发现其模型，`provider + model` 双键选择（dsh 的 `GenerateOptions.provider` + `.model` 语义）。
 
 ## Roadmap（对应 fusion-paths）
 

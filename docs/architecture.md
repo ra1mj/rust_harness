@@ -76,28 +76,29 @@ crates/
 
 ## 7. rh-cli：组合根 + Web
 
-`assemble()` 按顺序挂载插件树：`session → shell:local → fs:local → tools → model:mock`。
+`assemble()` 按顺序挂载插件树：`session → shell:local → fs:local → tools`（模型不在插件树里，按请求注入）。
 
 `rh web` 是一个中文浏览器界面（axum + WebSocket，最接近 dsh）：每个 WebSocket 连接拥有一个独立 `Session`，前端订阅 `Session::subscribe()` 的实时广播，把 agent loop 追加的每个 durable 事实**实时**渲染到 transcript（含模型逐字流式输出 `assistant/chunk`）。
 
-- `/api/tools`、`/api/config`：工具与插件树面板。
-- `/api/models`（GET/POST/DELETE）、`/api/models/active`：**在 Web 端增删/切换模型**。模型保存在 `ModelCatalog`（`ModelConfig` 列表 + 当前选中项），持久化到 `--models-file`；每个 turn 用当前选中模型重建 provider（`AgentBuilder::with_model`），所以切换模型对下一条消息立即生效。
-- `ModelConfig.provider` 二选一：`mock`（离线演示）或 `openai`（由 `rh-providers` 提供）。
+**LLM 层（学自 dsh）**：adapter 绑定一个 **provider 路由**（endpoint + 凭证），**模型按请求选择**。
+
+- `/api/providers`（GET/POST）、`/api/providers/{id}`（DELETE）、`/api/providers/{id}/discover`（`GET /models`）、`/api/active`（`provider + model` 双键选择）。
+- `ModelHub`（`rh-providers`）注册多个 provider、发现其模型、持久化到 `--models-file`；每个 turn 用当前 `(provider, model)` 重建 adapter（`AgentBuilder::with_model`），切换对下一条消息立即生效。
+- 无 mock 模式：`rh run` 走环境变量（`RH_API_KEY`/`RH_BASE_URL`/`RH_MODEL`）。
 
 ```text
-plugins (mount order):   session / shell:local / fs:local / tools / model:mock
-services:                SessionStore / Shell(local) / FileSystem(local) / TodoList / ToolRegistry / ModelProvider(mock)
+plugins (mount order):   session / shell:local / fs:local / tools
+services:                SessionStore / Shell(local) / FileSystem(local) / TodoList / ToolRegistry
 tools:                   bash / fs_read / fs_write / todo_write
 ```
 
-`rh run "…"` 的一次端到端运行（mock 模型）：
+`rh run "…"` 的一次端到端运行：
 
 ```text
 turn_start → user_message → step_start
-  → assistant_message(tool_call: bash)
-  → tool_call → tool_result(stdout="hello from rh") → step_end
-  → step_start → assistant_message(最终答复) → step_end
-turn_end
+  → assistant_chunk*（逐字流式） → assistant_message
+  → tool_call → tool_result → step_end
+  → … → turn_end
 ```
 
 ---
@@ -110,5 +111,6 @@ turn_end
 | `rh-tool` Tool trait / ToolStream | 能力 seam 的 Consumer | 统一 `Tool` trait |
 | `rh-session` SessionEvent / derive_messages | 会话日志真相 | session-events |
 | `rh-agent` AgentBuilder / Agent / 流式 loop | agent-loop 插件形式 | AgentBuilder + Agent |
+| `rh-providers` ModelHub / 模型发现 | LLM adapter seam（`ctx.llm`） | — |
 | `rh-web` axum + WebSocket | Web UI（`dsh web`） | — |
 | `rh-cli` 组合根 | profile/bundle 组合 | composition root 单二进制 |
