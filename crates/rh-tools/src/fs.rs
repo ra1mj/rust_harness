@@ -21,11 +21,15 @@ pub struct LocalFileSystem;
 #[async_trait]
 impl FileSystem for LocalFileSystem {
     async fn read(&self, path: &Path) -> Result<String, ToolError> {
-        tokio::fs::read_to_string(path).await.map_err(ToolError::from)
+        tokio::fs::read_to_string(path).await.map_err(|e| {
+            ToolError::execution(format!("读取文件失败 {}：{e}", path.display()))
+        })
     }
 
     async fn write(&self, path: &Path, content: &str) -> Result<(), ToolError> {
-        tokio::fs::write(path, content).await.map_err(ToolError::from)
+        tokio::fs::write(path, content).await.map_err(|e| {
+            ToolError::execution(format!("写入文件失败 {}：{e}", path.display()))
+        })
     }
 }
 

@@ -14,9 +14,15 @@
 //! one provider swap in `dsh` moves bash, PTY, and LSP together.
 
 mod fs;
+mod search;
 mod shell;
+mod subagent;
 mod tools;
+mod web;
 
 pub use fs::{FileSystem, FileSystemPlugin, LocalFileSystem};
+pub use search::{GlobTool, GrepTool};
 pub use shell::{CommandOutput, LocalShell, Shell, ShellPlugin};
+pub use subagent::{SubagentManager, TaskKillTool, TaskOutputTool, TaskTool, TaskWaitTool};
 pub use tools::{BashTool, FsReadTool, FsWriteTool, TodoWriteTool, ToolsPlugin};
+pub use web::{WebFetchTool, WebSearchTool};

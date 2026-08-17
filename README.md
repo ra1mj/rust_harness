@@ -56,8 +56,13 @@ cargo run -- web           # Web 里还可添加更多 Provider / 发现模型
 Web 左侧栏支持完整的工作区管理：
 
 - **会话**：`＋ 新会话` 创建；点击切换；双击重命名；悬停 `×` 删除。会话持久化到 `--data-dir`（每个会话一个 JSON 文件），重启后仍在。
-- **任务**：每会话一个 todo 列表，底部输入框添加、勾选完成；agent 的 `todo_write` 工具也写入当前会话任务。
+- **任务（todo）**：每会话一个 todo 清单，输入框添加、勾选完成；agent 的 `todo_write` 工具也写入当前会话任务。
+- **子代理任务（Codex 式）**：agent 可用 `task` 工具 spawn 子代理（独立 session + 模型 + 工具状态），`run_in_background` 后台、`task_output`/`task_wait` 取结果、`task_kill` 取消 —— 这是 grok-build 从 openai/codex 移植的任务模型。
 - **导出**：`导出 Markdown` / `导出 JSON` 下载当前会话 transcript（含任务）。
+
+### 内置工具
+
+`bash`、`fs_read`、`fs_write`、`todo_write`、`web_fetch`、`web_search`、`grep`、`glob`、`task`、`task_output`、`task_wait`、`task_kill`。
 
 ## 仓库结构
 
@@ -67,7 +72,7 @@ crates/
   rh-tool/    统一 Tool trait、ToolRegistry、ToolCallContext
   rh-session/ append-only SessionEvent 日志 + 任务 + 持久化 SessionStore + 导出(Markdown/JSON)
   rh-agent/   流式 ModelProvider seam、AgentBuilder、turn/step loop
-  rh-tools/   能力 seam（Shell/FileSystem）+ bash/fs_read/fs_write/todo_write（写会话任务）
+  rh-tools/   能力 seam（Shell/FileSystem）+ bash/fs_read/fs_write/todo_write/web_fetch/web_search/grep/glob + 子代理任务（task/task_output/task_wait/task_kill）
   rh-web/     axum Web 服务（中文 UI）+ WebSocket + 会话/任务/导出/模型 REST API
   rh-providers/ LLM 层：OpenAI 兼容 adapter + ModelHub（Provider 注册 + GET /models 发现 + 双键选择）
   rh-cli/     组合根 + CLI（run/tools/dump-config/web）
@@ -81,6 +86,18 @@ crates/
 4. **统一工具边界**：所有工具实现一条 `Tool` trait，流式契约 `[Progress*, Terminal]`。
 5. **流式模型输出**：模型 seam 是流式的（`ModelEvent`），loop 边收边记 `assistant/chunk`，Web 前端实时打字。
 6. **多 Provider / 多模型**：`ModelHub` 注册多个 provider 路由，`GET /models` 发现其模型，`provider + model` 双键选择（dsh 的 `GenerateOptions.provider` + `.model` 语义）。
+7. **子代理任务**：`task` 工具 spawn 后台/前台子代理（独立 session），`task_output`/`task_wait`/`task_kill` 管理生命周期（Codex/grok 任务模型）。
+
+### grok-build 在本项目中的作用
+
+grok-build 的贡献是**工具与代理的运行时骨架**，不是 UI：
+
+- **统一 `Tool` trait**（`id`/`description`(JSON Schema)/`capabilities`/`should_list`/`execute`/`run`）+ `[Progress*, Terminal]` 流契约 → `rh-tool`。
+- **`ToolRegistry`（≈ ToolBridge）**：持有工具集并路由调用。
+- **`AgentBuilder` 组装不可变 `Agent`**（definition + session context）→ `rh-agent`。
+- **composition root 单二进制** → `rh-cli`。
+- **Codex 子代理任务模型**（grok 从 openai/codex 移植的 `task`/`task_output`/`task_wait`/`task_kill`）→ `rh-tools` 的 `subagent`。
+- **工具清单**（bash/web_search/web_fetch/grep/glob/todo）→ 对应 `rh-tools` 内置工具。
 
 ## Roadmap（对应 fusion-paths）
 

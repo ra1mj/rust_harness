@@ -112,5 +112,9 @@ turn_start → user_message → step_start
 | `rh-session` SessionEvent / derive_messages | 会话日志真相 | session-events |
 | `rh-agent` AgentBuilder / Agent / 流式 loop | agent-loop 插件形式 | AgentBuilder + Agent |
 | `rh-providers` ModelHub / 模型发现 | LLM adapter seam（`ctx.llm`） | — |
+| `rh-tools` web_search/web_fetch/grep/glob | web/搜索能力（dsh 插件生态） | grok 同名工具 |
+| `rh-tools` subagent（task/task_output/task_wait/task_kill） | subagent 能力 | **Codex 任务模型**（grok 从 openai/codex 移植） |
 | `rh-web` axum + WebSocket | Web UI（`dsh web`） | — |
 | `rh-cli` 组合根 | profile/bundle 组合 | composition root 单二进制 |
+
+> grok-build 的贡献集中在**运行时骨架**：统一 `Tool` trait + `ToolRegistry`、`AgentBuilder`、composition root、以及 vendor 的 Codex 子代理任务模型——它提供的是"工具/代理如何装配与运行"，而不是 UI。

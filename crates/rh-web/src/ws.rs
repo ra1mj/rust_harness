@@ -137,6 +137,10 @@ async fn run_turn(state: &AppState, session: Arc<Session>, input: &str) -> anyho
         .active()
         .ok_or_else(|| anyhow::anyhow!("没有可用的模型，请先在设置里添加并选择"))?;
     let provider = state.hub.build_provider_for(&provider_config.id)?;
+    // Register the active provider on the context so the agent AND any
+    // subagents it spawns resolve the same model (dsh: model adapter is a
+    // plugin). Held for this turn only.
+    let _registration = state.ctx.provide_named("ModelProvider", provider);
     let definition = AgentDefinition {
         name: "rh-web".to_string(),
         model: model_info.id.clone(),
@@ -144,9 +148,7 @@ async fn run_turn(state: &AppState, session: Arc<Session>, input: &str) -> anyho
         tool_ids: Vec::new(),
         max_steps: 8,
     };
-    let agent = AgentBuilder::new(state.ctx.clone(), definition)
-        .with_model(provider)
-        .build(session)?;
+    let agent = AgentBuilder::new(state.ctx.clone(), definition).build(session)?;
     agent.run(input).await?;
     Ok(())
 }

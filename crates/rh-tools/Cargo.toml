@@ -9,9 +9,16 @@ description = "rh-tools: capability seams (Shell, FileSystem) + built-in tools (
 [dependencies]
 anyhow.workspace = true
 async-trait.workspace = true
+glob = "0.3"
+regex = "1"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 serde.workspace = true
 serde_json.workspace = true
 tokio.workspace = true
+rh-agent.workspace = true
 rh-core.workspace = true
 rh-session.workspace = true
 rh-tool.workspace = true
+
+[dev-dependencies]
+futures.workspace = true

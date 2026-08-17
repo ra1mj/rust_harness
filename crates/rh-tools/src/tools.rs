@@ -10,7 +10,10 @@ use rh_session::SessionStore;
 use rh_tool::{Tool, ToolCallContext, ToolDescription, ToolError, ToolId, ToolRegistry};
 
 use crate::fs::FileSystem;
+use crate::search::{GlobTool, GrepTool};
 use crate::shell::Shell;
+use crate::subagent::{SubagentManager, TaskKillTool, TaskOutputTool, TaskTool, TaskWaitTool};
+use crate::web::{WebFetchTool, WebSearchTool};
 
 /// Runs a shell command via the [`Shell`] service.
 pub struct BashTool;
@@ -180,11 +183,21 @@ impl Plugin for ToolsPlugin {
         let registry = Arc::new(ToolRegistry::new());
         disposers.push(ctx.provide_named("ToolRegistry", registry.clone()));
 
+        disposers.push(ctx.provide_named("SubagentManager", SubagentManager::new()));
+
         let tools: Vec<Arc<dyn Tool>> = vec![
             Arc::new(BashTool),
             Arc::new(FsReadTool),
             Arc::new(FsWriteTool),
             Arc::new(TodoWriteTool),
+            Arc::new(WebFetchTool),
+            Arc::new(WebSearchTool),
+            Arc::new(GrepTool),
+            Arc::new(GlobTool),
+            Arc::new(TaskTool),
+            Arc::new(TaskOutputTool),
+            Arc::new(TaskWaitTool),
+            Arc::new(TaskKillTool),
         ];
         for tool in tools {
             disposers.push(registry.register(tool));

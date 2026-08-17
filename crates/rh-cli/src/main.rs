@@ -8,7 +8,7 @@ use std::sync::Arc;
 
 use clap::{Parser, Subcommand};
 
-use rh_agent::{AgentBuilder, AgentDefinition};
+use rh_agent::{AgentBuilder, AgentDefinition, ModelProvider};
 use rh_core::{Context, Disposers, Plugin};
 use rh_session::{SessionPlugin, SessionStore};
 use rh_tool::{ToolCallContext, ToolRegistry};
@@ -126,9 +126,10 @@ async fn run(task: &str) -> anyhow::Result<()> {
         max_steps: 8,
     };
 
-    let agent = AgentBuilder::new(ctx, definition)
-        .with_model(Arc::new(provider))
-        .build(session)?;
+    // Register the provider on the context so the agent and its subagents
+    // resolve the same model.
+    let _registration = ctx.provide_named("ModelProvider", Arc::new(provider) as Arc<dyn ModelProvider>);
+    let agent = AgentBuilder::new(ctx, definition).build(session)?;
     let report = agent.run(task).await?;
 
     println!("== session transcript ({}) ==", agent.session().id());
