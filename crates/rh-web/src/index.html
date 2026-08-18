@@ -163,6 +163,45 @@
   .toolcard .body { padding: 0 13px 10px; font-family: var(--mono); font-size: 12px; line-height: 1.55; color: var(--text-2); white-space: pre-wrap; word-break: break-word; max-height: 300px; overflow-y: auto; }
   .toolcard .body .sec { margin-top: 8px; color: var(--caption); font-size: 11px; font-weight: 600; }
   .toolcard.collapsed .body { display: none; }
+
+  /* ---------- Activity side panel ---------- */
+  .activity {
+    width: 300px; flex: none; display: flex; flex-direction: column; min-height: 0;
+    background: var(--frost);
+    -webkit-backdrop-filter: blur(24px) saturate(180%); backdrop-filter: blur(24px) saturate(180%);
+    border-left: 1px solid var(--border);
+    transition: margin-right .25s var(--ease);
+  }
+  .activity.collapsed { margin-right: -300px; }
+  .activity-head { display: flex; align-items: center; justify-content: space-between; padding: 16px 16px 10px; }
+  .activity-head .title { font-size: 13px; font-weight: 600; }
+  .activity-head .toggle { border: none; background: none; color: var(--caption); font-size: 16px; cursor: pointer; padding: 2px 6px; border-radius: 6px; transition: transform .25s var(--ease); }
+  .activity-head .toggle:hover { color: var(--text); }
+  .activity.collapsed .toggle { transform: rotate(180deg); }
+  .activity-body { flex: 1; overflow-y: auto; padding: 4px 12px 16px; min-height: 0; }
+
+  .act-item { border: 1px solid var(--border); border-radius: 12px; background: var(--surface); margin-bottom: 8px; overflow: hidden; }
+  .act-head { display: flex; align-items: center; gap: 8px; padding: 8px 12px; cursor: pointer; font-size: 12.5px; }
+  .act-head .chev { color: var(--caption); font-size: 10px; flex: none; }
+  .act-head .icon { flex: none; }
+  .act-head .name { flex: 1; min-width: 0; font-family: var(--mono); font-weight: 600; color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .act-status { font-size: 10px; font-weight: 500; border-radius: 999px; padding: 1px 8px; flex: none; }
+  .act-status.running { color: var(--accent); background: rgba(0, 113, 227, 0.1); }
+  .act-status.ok { color: var(--success); background: rgba(52, 199, 89, 0.12); }
+  .act-status.err { color: var(--error); background: rgba(255, 59, 48, 0.1); }
+  .act-body { display: none; padding: 0 12px 10px 32px; font-family: var(--mono); font-size: 11.5px; line-height: 1.55; color: var(--text-2); white-space: pre-wrap; word-break: break-word; max-height: 240px; overflow-y: auto; }
+  .act-body .sec { margin-top: 8px; color: var(--caption); font-size: 10.5px; font-weight: 600; }
+  .act-item.open .act-body { display: block; }
+
+  /* flowing-light shimmer sweep on the running item */
+  .act-item.running { position: relative; }
+  .act-item.running::before {
+    content: ''; position: absolute; inset: 0; pointer-events: none;
+    background: linear-gradient(100deg, transparent 20%, rgba(0, 113, 227, 0.14) 45%, rgba(120, 180, 255, 0.22) 50%, rgba(0, 113, 227, 0.14) 55%, transparent 80%);
+    background-size: 250% 100%;
+    animation: shimmer 1.6s linear infinite;
+  }
+  @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -50% 0; } }
   .reasoning.breathing { animation: reasoning-breathe 2.2s ease-in-out infinite; }
   .reasoning.breathing .head { color: var(--accent); }
   .reasoning.breathing .head .dots::after { content: '…'; animation: dots 1.2s steps(4) infinite; display: inline-block; }
@@ -343,6 +382,16 @@
     </div>
   </main>
 
+  <section class="activity" id="activityPanel">
+    <div class="activity-head">
+      <span class="title">活动</span>
+      <button class="toggle" id="activityToggle" title="收起">»</button>
+    </div>
+    <div class="activity-body" id="activityBody">
+      <div class="hint">暂无活动</div>
+    </div>
+  </section>
+
   <div class="overlay hidden" id="overlay">
     <div class="modal">
       <h2>设置</h2>
@@ -456,72 +505,59 @@
     return currentAssistant;
   }
 
-  function ensureReasoning() {
-    if (currentReasoning) return currentReasoning;
-    const box = el('div', 'reasoning collapsed breathing');
-    const head = el('div', 'head');
-    const chev = el('span', '', '▸');
+  function addActivity(icon, name) {
+    const body = document.getElementById('activityBody');
+    const hint = body.querySelector('.hint');
+    if (hint) hint.remove();
+    const item = el('div', 'act-item open running');
+    const head = el('div', 'act-head');
+    const chev = el('span', 'chev', '▾');
     head.appendChild(chev);
-    head.appendChild(el('span', '', '思考中'));
-    head.appendChild(el('span', 'dots', ''));
-    head.onclick = () => {
-      const collapsed = box.classList.toggle('collapsed');
-      chev.textContent = collapsed ? '▸' : '▾';
-    };
-    box.appendChild(head);
-    const body = el('div', 'body', '');
-    box.appendChild(body);
-    addRow(box);
-    currentReasoning = { body, box };
-    return currentReasoning;
-  }
-  function closeReasoning() {
-    if (currentReasoning) {
-      currentReasoning.box.classList.remove('breathing');
-      const label = currentReasoning.box.querySelector('.head span:nth-child(2)');
-      if (label) label.textContent = '思考过程';
-      const dots = currentReasoning.box.querySelector('.dots');
-      if (dots) dots.remove();
-      currentReasoning = null;
-    }
-  }
-
-  function ensureTool(name) {
-    if (currentTool) return currentTool;
-    const box = el('div', 'toolcard collapsed');
-    const head = el('div', 'head');
-    const chev = el('span', 'chev', '▸');
-    head.appendChild(chev);
-    head.appendChild(el('span', 'name', '⚙ ' + name));
-    const status = el('span', 'status running', '运行中');
+    head.appendChild(el('span', 'icon', icon));
+    head.appendChild(el('span', 'name', name));
+    const status = el('span', 'act-status running', '运行中');
     head.appendChild(status);
     head.onclick = () => {
-      const collapsed = box.classList.toggle('collapsed');
-      chev.textContent = collapsed ? '▸' : '▾';
+      const open = item.classList.toggle('open');
+      chev.textContent = open ? '▾' : '▸';
     };
-    box.appendChild(head);
-    const body = el('div', 'body', '');
-    box.appendChild(body);
-    addRow(box);
-    currentTool = { box, head, body, status, chev };
-    return currentTool;
+    item.appendChild(head);
+    const bd = el('div', 'act-body', '');
+    item.appendChild(bd);
+    body.appendChild(item);
+    body.scrollTop = body.scrollHeight;
+    return {
+      item, body: bd, status, chev,
+      finish(ok, statusText) {
+        item.classList.remove('running', 'open');
+        status.textContent = statusText;
+        status.className = 'act-status ' + (ok ? 'ok' : 'err');
+        chev.textContent = '▸';
+        body.scrollTop = body.scrollHeight;
+      }
+    };
+  }
+  function clearActivity() {
+    const body = document.getElementById('activityBody');
+    body.textContent = '';
+    body.appendChild(el('div', 'hint', '暂无活动'));
   }
 
   function renderEvent(ev) {
     switch (ev.type) {
-      case 'user_message': { const row = el('div', 'msg-user'); row.appendChild(el('div', 'bubble', textFromContent(ev.content))); addRow(row); currentAssistant = null; closeReasoning(); currentTool = null; break; }
+      case 'user_message': { const row = el('div', 'msg-user'); row.appendChild(el('div', 'bubble', textFromContent(ev.content))); addRow(row); currentAssistant = null; currentTool = null; break; }
       case 'assistant_chunk': { ensureAssistant().text.textContent += ev.text; scrollBottom(); break; }
-      case 'reasoning_chunk': { ensureReasoning().body.textContent += ev.text; scrollBottom(); break; }
-      case 'assistant_message': { const text = textFromContent(ev.content); if (currentAssistant) { if (text && !currentAssistant.text.textContent) currentAssistant.text.textContent = text; currentAssistant = null; } else if (text) { ensureAssistant().text.textContent = text; currentAssistant = null; } closeReasoning(); currentTool = null; break; }
-      case 'tool_call': { ensureTool(ev.tool_name); currentTool.body.appendChild(el('div', 'sec', '参数')); currentTool.body.appendChild(document.createTextNode(JSON.stringify(ev.arguments || {}, null, 0))); currentAssistant = null; break; }
-      case 'tool_result': { if (currentTool) { let out; try { out = typeof ev.output === 'string' ? ev.output : JSON.stringify(ev.output); } catch (e) { out = String(ev.output); } if (out.length > 1200) out = out.slice(0, 1200) + '…'; currentTool.body.appendChild(el('div', 'sec', ev.is_error ? '结果（失败）' : '结果')); currentTool.body.appendChild(document.createTextNode(out)); const st = currentTool.status; st.textContent = ev.is_error ? '✗' : '✓'; st.className = 'status ' + (ev.is_error ? 'err' : 'ok'); currentTool.box.classList.add('collapsed'); currentTool = null; } break; }
-      case 'turn_start': { addRow(el('div', 'turn-sep', '新回合')); break; }
+      case 'reasoning_chunk': { if (!currentReasoning) currentReasoning = addActivity('💭', '思考'); currentReasoning.body.appendChild(document.createTextNode(ev.text)); break; }
+      case 'assistant_message': { const text = textFromContent(ev.content); if (currentAssistant) { if (text && !currentAssistant.text.textContent) currentAssistant.text.textContent = text; currentAssistant = null; } else if (text) { ensureAssistant().text.textContent = text; currentAssistant = null; } if (currentReasoning) { currentReasoning.finish(true, '完成'); currentReasoning = null; } currentTool = null; break; }
+      case 'tool_call': { currentTool = addActivity('⚙', ev.tool_name); currentTool.body.appendChild(el('div', 'sec', '参数')); currentTool.body.appendChild(document.createTextNode(JSON.stringify(ev.arguments || {}))); currentAssistant = null; break; }
+      case 'tool_result': { if (currentTool) { let out; try { out = typeof ev.output === 'string' ? ev.output : JSON.stringify(ev.output); } catch (e) { out = String(ev.output); } if (out.length > 1200) out = out.slice(0, 1200) + '…'; currentTool.body.appendChild(el('div', 'sec', ev.is_error ? '结果（失败）' : '结果')); currentTool.body.appendChild(document.createTextNode(out)); currentTool.finish(!ev.is_error, ev.is_error ? '✗' : '✓'); currentTool = null; } break; }
+      case 'turn_start': { clearActivity(); addRow(el('div', 'turn-sep', '新回合')); break; }
       case 'workflow_step': { if (ev.mode === 'trellis') { currentMode = 'trellis'; modeDropdown.setLabel('Trellis 工作流'); renderTrellis(ev.step); } break; }
       default: break;
     }
   }
 
-  function clearTranscript() { column.textContent = ''; currentAssistant = null; currentReasoning = null; currentTool = null; hasMessages = false; setHero(true); }
+  function clearTranscript() { column.textContent = ''; currentAssistant = null; currentReasoning = null; currentTool = null; hasMessages = false; setHero(true); clearActivity(); }
 
   function send() {
     const text = input.value.trim();
@@ -894,6 +930,7 @@
 
   // ---------- wiring ----------
   document.getElementById('newSession').onclick = newSession;
+  document.getElementById('activityToggle').onclick = () => document.getElementById('activityPanel').classList.toggle('collapsed');
   document.getElementById('wsChangeBtn').onclick = changeWorkspace;
   document.getElementById('settingsBtn').onclick = () => { overlay.classList.remove('hidden'); loadProviders(); loadMcp(); loadMeta(); };
   document.getElementById('closeBtn').onclick = () => overlay.classList.add('hidden');
