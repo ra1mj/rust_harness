@@ -69,6 +69,18 @@
   .task-item:hover { background: var(--ds-hover); }
   .task-item input[type=checkbox] { margin-top: 3px; accent-color: var(--ds-brand); }
   .task-item .done { text-decoration: line-through; color: var(--ds-caption); }
+  .task-item .ttl { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .task-item .x { display: none; border: none; background: none; color: var(--ds-caption); cursor: pointer; font-size: 14px; line-height: 1; padding: 0 2px; }
+  .task-item:hover .x { display: block; }
+  .task-item .x:hover { color: var(--ds-error); }
+  .task-status { font-size: 10px; border-radius: 999px; padding: 1px 7px; flex: none; }
+  .task-status.pending { color: var(--ds-caption); border: 1px solid var(--ds-border); }
+  .task-status.in_progress { color: var(--ds-brand); border: 1px solid var(--ds-brand); }
+  .task-status.completed { color: var(--ds-success); border: 1px solid var(--ds-success); }
+  .task-status.cancelled { color: var(--ds-caption); border: 1px solid var(--ds-border); }
+  .taskbar { height: 4px; background: var(--ds-border); border-radius: 2px; margin: 2px 4px 8px; overflow: hidden; }
+  .taskbar .fill { height: 100%; background: var(--ds-brand); transition: width .2s var(--ds-ease); }
+  .task-progress { font-size: 11px; color: var(--ds-caption); padding: 0 4px; }
   .add-task { display: flex; gap: 6px; margin-top: 4px; }
   .add-task input { flex: 1; min-width: 0; border: 1px solid var(--ds-border); border-radius: 8px; padding: 5px 9px; font-size: 12.5px; background: var(--ds-bg); color: var(--ds-text); outline: none; }
   .add-task input:focus { border-color: var(--ds-brand); }
@@ -458,27 +470,51 @@
     let data; try { data = await (await fetch('/api/sessions/' + encodeURIComponent(currentSessionId) + '/tasks')).json(); } catch (err) { return; }
     renderTasks(data.tasks || []);
   }
+  const TASK_LABELS = { pending: '待办', in_progress: '进行中', completed: '完成', cancelled: '取消' };
   function renderTasks(tasks) {
     taskList.textContent = '';
-    if (!tasks.length) { taskList.appendChild(el('div', 'hint', '暂无任务')); return; }
+    const done = tasks.filter(t => t.status === 'completed').length;
+    const bar = document.createElement('div');
+    bar.className = 'taskbar';
+    const fill = document.createElement('div');
+    fill.className = 'fill';
+    fill.style.width = (tasks.length ? Math.round(done / tasks.length * 100) : 0) + '%';
+    bar.appendChild(fill);
+    taskList.appendChild(bar);
+    const prog = el('div', 'task-progress', tasks.length ? `已完成 ${done}/${tasks.length}` : '暂无任务');
+    taskList.appendChild(prog);
+    if (!tasks.length) return;
     tasks.forEach(t => {
       const item = el('div', 'task-item');
-      const cb = document.createElement('input'); cb.type = 'checkbox'; cb.checked = t.done;
-      cb.onchange = () => toggleTask(t.id, cb.checked);
-      item.appendChild(cb);
-      const lbl = el('span', t.done ? 'done' : '', t.title);
+      const lbl = el('span', 'ttl' + (t.status === 'completed' || t.status === 'cancelled' ? ' done' : ''), t.title);
       item.appendChild(lbl);
+      const badge = el('span', 'task-status ' + t.status, TASK_LABELS[t.status] || t.status);
+      item.appendChild(badge);
+      const x = el('button', 'x', '×');
+      x.onclick = () => deleteTask(t.id);
+      item.appendChild(x);
+      item.onclick = () => cycleTask(t);
       taskList.appendChild(item);
     });
+  }
+  function cycleTask(t) {
+    const order = ['pending', 'in_progress', 'completed', 'pending'];
+    const next = order[(order.indexOf(t.status) + 1) % order.length];
+    setTaskStatus(t.id, next);
+  }
+  async function setTaskStatus(taskId, status) {
+    if (!currentSessionId) return;
+    await fetch('/api/sessions/' + encodeURIComponent(currentSessionId) + '/tasks/' + encodeURIComponent(taskId), { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status }) });
+    loadTasks();
+  }
+  async function deleteTask(taskId) {
+    if (!currentSessionId) return;
+    await fetch('/api/sessions/' + encodeURIComponent(currentSessionId) + '/tasks/' + encodeURIComponent(taskId), { method: 'DELETE' });
+    loadTasks();
   }
   async function addTask(title) {
     if (!currentSessionId || !title) return;
     await fetch('/api/sessions/' + encodeURIComponent(currentSessionId) + '/tasks', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title }) });
-    loadTasks();
-  }
-  async function toggleTask(taskId, done) {
-    if (!currentSessionId) return;
-    await fetch('/api/sessions/' + encodeURIComponent(currentSessionId) + '/tasks/' + encodeURIComponent(taskId), { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ done }) });
     loadTasks();
   }
 

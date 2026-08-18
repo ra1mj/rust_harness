@@ -24,7 +24,7 @@ use serde_json::{json, Value};
 use rh_core::Context;
 use rh_mcp::McpServerConfig;
 use rh_providers::{ModelHub, ProviderConfig};
-use rh_session::{workspace_context, SessionStore, TaskItem};
+use rh_session::{workspace_context, SessionStore, TaskItem, TaskStatus};
 use rh_tool::{ToolCallContext, ToolRegistry};
 use rh_tools::SkillStore;
 
@@ -88,7 +88,7 @@ pub async fn serve(
         )
         .route("/api/sessions/{id}/export", get(export_session))
         .route("/api/sessions/{id}/tasks", get(list_tasks).post(add_task))
-        .route("/api/sessions/{id}/tasks/{task_id}", patch(set_task_done))
+        .route("/api/sessions/{id}/tasks/{task_id}", patch(set_task_status).delete(delete_task))
         .route("/api/sessions/{id}/workspace", get(get_workspace).post(set_workspace))
         .route("/api/sessions/{id}/mode", get(get_mode).post(set_mode))
         .route("/ws", get(ws::upgrade))
@@ -458,16 +458,39 @@ async fn set_workspace(
     })))
 }
 
-async fn set_task_done(
+fn parse_status(s: &str) -> TaskStatus {
+    match s {
+        "in_progress" => TaskStatus::InProgress,
+        "completed" => TaskStatus::Completed,
+        "cancelled" => TaskStatus::Cancelled,
+        _ => TaskStatus::Pending,
+    }
+}
+
+async fn set_task_status(
     State(state): State<AppState>,
     Path((id, task_id)): Path<(String, String)>,
     Json(body): Json<Value>,
 ) -> Result<Json<Value>, (StatusCode, String)> {
-    let done = body.get("done").and_then(Value::as_bool).unwrap_or(false);
+    let status = parse_status(body.get("status").and_then(Value::as_str).unwrap_or("pending"));
     let session = store(&state)
         .get(&id)
         .ok_or_else(|| (StatusCode::NOT_FOUND, "session not found".to_string()))?;
-    session.set_task_done(&task_id, done);
+    session.set_task_status(&task_id, status);
+    store(&state)
+        .save(&session)
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    Ok(Json(json!({ "tasks": session.tasks() })))
+}
+
+async fn delete_task(
+    State(state): State<AppState>,
+    Path((id, task_id)): Path<(String, String)>,
+) -> Result<Json<Value>, (StatusCode, String)> {
+    let session = store(&state)
+        .get(&id)
+        .ok_or_else(|| (StatusCode::NOT_FOUND, "session not found".to_string()))?;
+    session.remove_task(&task_id);
     store(&state)
         .save(&session)
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;

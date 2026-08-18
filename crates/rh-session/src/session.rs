@@ -115,13 +115,24 @@ pub enum SessionEvent {
     },
 }
 
+/// The status of a todo task.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum TaskStatus {
+    #[default]
+    Pending,
+    InProgress,
+    Completed,
+    Cancelled,
+}
+
 /// A user- or agent-created task in the session's todo list.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct TaskItem {
     pub id: String,
     pub title: String,
     #[serde(default)]
-    pub done: bool,
+    pub status: TaskStatus,
 }
 
 /// Lightweight metadata for listing sessions.
@@ -280,20 +291,41 @@ impl Session {
         let item = TaskItem {
             id: next_id(IdKind::Task),
             title: title.into(),
-            done: false,
+            status: TaskStatus::Pending,
         };
         self.tasks.write().expect("tasks poisoned").push(item.clone());
         item
     }
 
-    /// Mark a task done/undone.
-    pub fn set_task_done(&self, id: &str, done: bool) -> bool {
+    /// Set a task's status.
+    pub fn set_task_status(&self, id: &str, status: TaskStatus) -> bool {
         let mut tasks = self.tasks.write().expect("tasks poisoned");
         if let Some(item) = tasks.iter_mut().find(|t| t.id == id) {
-            item.done = done;
+            item.status = status;
             true
         } else {
             false
+        }
+    }
+
+    /// Remove a task.
+    pub fn remove_task(&self, id: &str) -> bool {
+        let mut tasks = self.tasks.write().expect("tasks poisoned");
+        let before = tasks.len();
+        tasks.retain(|t| t.id != id);
+        tasks.len() != before
+    }
+
+    /// Replace the whole task list (used by `todo_write`).
+    pub fn replace_tasks(&self, items: Vec<(String, TaskStatus)>) {
+        let mut tasks = self.tasks.write().expect("tasks poisoned");
+        tasks.clear();
+        for (title, status) in items {
+            tasks.push(TaskItem {
+                id: next_id(IdKind::Task),
+                title,
+                status,
+            });
         }
     }
 
@@ -424,7 +456,12 @@ impl Session {
         if !self.tasks().is_empty() {
             out.push_str("\n## 任务\n\n");
             for task in self.tasks() {
-                let mark = if task.done { "[x]" } else { "[ ]" };
+                let mark = match task.status {
+                    TaskStatus::Completed => "[x]",
+                    TaskStatus::Cancelled => "[-]",
+                    TaskStatus::InProgress => "[>]",
+                    TaskStatus::Pending => "[ ]",
+                };
                 out.push_str(&format!("- {mark} {}\n", task.title));
             }
         }
@@ -728,7 +765,7 @@ mod tests {
         let session = Session::new("t", None);
         session.add_task("写文档");
         let item = session.add_task("写测试");
-        session.set_task_done(&item.id, true);
+        session.set_task_status(&item.id, TaskStatus::Completed);
         assert_eq!(session.tasks().len(), 2);
 
         session.append(SessionEvent::UserMessage {

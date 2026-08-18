@@ -6,7 +6,7 @@ use async_trait::async_trait;
 use serde_json::{json, Value};
 
 use rh_core::{Context, Disposers, Plugin};
-use rh_session::SessionStore;
+use rh_session::{SessionStore, TaskStatus};
 use rh_tool::{Tool, ToolCallContext, ToolDescription, ToolError, ToolId, ToolRegistry};
 
 use crate::fs::FileSystem;
@@ -159,7 +159,7 @@ impl Tool for FsWriteTool {
     }
 }
 
-/// Appends a todo to the current session's task list.
+/// Sets the current session's todo list (standard `todo_write` format).
 pub struct TodoWriteTool;
 
 #[async_trait]
@@ -171,31 +171,65 @@ impl Tool for TodoWriteTool {
     fn description(&self) -> ToolDescription {
         ToolDescription::new(
             "todo_write",
-            "Append a task to the current session's todo list and return the list.",
+            "Set the session's todo list. Pass the full list of todos with their status (pending / in_progress / completed / cancelled).",
             json!({
                 "type": "object",
                 "properties": {
-                    "title": { "type": "string", "description": "the todo title" }
+                    "todos": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "content": { "type": "string" },
+                                "status": {
+                                    "type": "string",
+                                    "enum": ["pending", "in_progress", "completed", "cancelled"]
+                                }
+                            },
+                            "required": ["content", "status"]
+                        }
+                    }
                 },
-                "required": ["title"]
+                "required": ["todos"]
             }),
         )
     }
 
     async fn run(&self, ctx: &ToolCallContext, args: Value) -> Result<Value, ToolError> {
-        let title = args
-            .get("title")
-            .and_then(Value::as_str)
-            .ok_or_else(|| ToolError::execution("missing `title` argument"))?;
         let store = ctx.service::<SessionStore>("SessionStore")?;
         let session = store
             .get(&ctx.session_id)
             .ok_or_else(|| ToolError::execution("session not found"))?;
-        let item = session.add_task(title.to_string());
+
+        if let Some(todos) = args.get("todos").and_then(Value::as_array) {
+            let items: Vec<(String, TaskStatus)> = todos
+                .iter()
+                .filter_map(|t| {
+                    let content = t.get("content").and_then(Value::as_str)?.to_string();
+                    let status = parse_status(t.get("status").and_then(Value::as_str).unwrap_or("pending"));
+                    Some((content, status))
+                })
+                .collect();
+            session.replace_tasks(items);
+        } else if let Some(title) = args.get("title").and_then(Value::as_str) {
+            session.add_task(title.to_string());
+        } else {
+            return Err(ToolError::execution("缺少 todos 或 title"));
+        }
+
         store
             .save(&session)
             .map_err(|e| ToolError::execution(e.to_string()))?;
-        Ok(json!({ "id": item.id, "todos": session.tasks() }))
+        Ok(json!({ "todos": session.tasks() }))
+    }
+}
+
+fn parse_status(s: &str) -> TaskStatus {
+    match s {
+        "in_progress" => TaskStatus::InProgress,
+        "completed" => TaskStatus::Completed,
+        "cancelled" => TaskStatus::Cancelled,
+        _ => TaskStatus::Pending,
     }
 }
 
