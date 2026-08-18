@@ -119,8 +119,10 @@ pub struct ModelRequest {
 /// One event in a model completion stream.
 #[derive(Debug, Clone)]
 pub enum ModelEvent {
-    /// A chunk of assistant text.
+    /// A chunk of assistant text (the final answer).
     Text(String),
+    /// A chunk of reasoning content (display-only, not model-visible).
+    Reasoning(String),
     /// A tool call the model wants executed.
     ToolCall(ModelToolCall),
     /// Terminal: the reason the completion ended. Always last.

@@ -122,6 +122,12 @@
   .tool-result .ok { color: var(--ds-success); }
   .tool-result .err { color: var(--ds-error); }
 
+  .reasoning { border: 1px solid var(--ds-border); border-radius: 10px; background: var(--ds-sidebar); align-self: flex-start; max-width: 100%; }
+  .reasoning .head { display: flex; align-items: center; gap: 6px; padding: 6px 12px; cursor: pointer; font-size: 12px; color: var(--ds-caption); user-select: none; }
+  .reasoning .head:hover { color: var(--ds-text-secondary); }
+  .reasoning .body { padding: 2px 12px 10px; font-size: 13px; color: var(--ds-caption); white-space: pre-wrap; word-break: break-word; max-height: 360px; overflow-y: auto; }
+  .reasoning.collapsed .body { display: none; }
+
   .composer { flex: none; display: flex; flex-direction: column; align-items: center; padding: 8px 16px 16px; }
   .card { box-sizing: border-box; display: flex; flex-direction: column; gap: 10px; width: 100%; max-width: var(--ds-composer-width); border: 1px solid var(--ds-border-strong); border-radius: 22px; background: var(--ds-bg); box-shadow: var(--ds-shadow); padding: 10px 10px 6px; }
   .card textarea { width: 100%; resize: none; border: none; outline: none; background: transparent; color: var(--ds-text); font-size: 16px; line-height: 24px; padding: 4px 12px 0 16px; min-height: 30px; max-height: 200px; }
@@ -283,7 +289,7 @@
   const taskList = document.getElementById('taskList');
   const taskInput = document.getElementById('taskInput');
 
-  let ws, currentAssistant = null, working = false, hasMessages = false;
+  let ws, currentAssistant = null, currentReasoning = null, working = false, hasMessages = false;
   let currentSessionId = null;
   let currentMode = 'direct';
   let providersData = { providers: [], models: {}, active: {} };
@@ -308,11 +314,31 @@
     return currentAssistant;
   }
 
+  function ensureReasoning() {
+    if (currentReasoning) return currentReasoning;
+    const box = el('div', 'reasoning collapsed');
+    const head = el('div', 'head');
+    const chev = el('span', '', '▸');
+    head.appendChild(chev);
+    head.appendChild(el('span', '', '思考过程'));
+    head.onclick = () => {
+      const collapsed = box.classList.toggle('collapsed');
+      chev.textContent = collapsed ? '▸' : '▾';
+    };
+    box.appendChild(head);
+    const body = el('div', 'body', '');
+    box.appendChild(body);
+    addRow(box);
+    currentReasoning = { body };
+    return currentReasoning;
+  }
+
   function renderEvent(ev) {
     switch (ev.type) {
-      case 'user_message': { const row = el('div', 'msg-user'); row.appendChild(el('div', 'bubble', textFromContent(ev.content))); addRow(row); currentAssistant = null; break; }
+      case 'user_message': { const row = el('div', 'msg-user'); row.appendChild(el('div', 'bubble', textFromContent(ev.content))); addRow(row); currentAssistant = null; currentReasoning = null; break; }
       case 'assistant_chunk': { ensureAssistant().text.textContent += ev.text; scrollBottom(); break; }
-      case 'assistant_message': { const text = textFromContent(ev.content); if (currentAssistant) { if (text && !currentAssistant.text.textContent) currentAssistant.text.textContent = text; currentAssistant = null; } else if (text) { ensureAssistant().text.textContent = text; currentAssistant = null; } break; }
+      case 'reasoning_chunk': { ensureReasoning().body.textContent += ev.text; scrollBottom(); break; }
+      case 'assistant_message': { const text = textFromContent(ev.content); if (currentAssistant) { if (text && !currentAssistant.text.textContent) currentAssistant.text.textContent = text; currentAssistant = null; } else if (text) { ensureAssistant().text.textContent = text; currentAssistant = null; } currentReasoning = null; break; }
       case 'tool_call': { const row = el('div', 'msg-assistant'); row.appendChild(el('div', 'avatar', '⚙')); const body = el('div', 'body'); const chip = el('div', 'tool-call'); chip.appendChild(el('span', 'name', ev.tool_name)); chip.appendChild(document.createTextNode(' ' + JSON.stringify(ev.arguments || {}))); body.appendChild(chip); row.appendChild(body); addRow(row); currentAssistant = null; break; }
       case 'tool_result': { const row = el('div', 'msg-assistant'); row.appendChild(el('div', 'avatar', '⚙')); const body = el('div', 'body'); const res = el('div', 'tool-result' + (ev.is_error ? ' error' : '')); res.appendChild(el('span', ev.is_error ? 'err' : 'ok', ev.is_error ? '✗ ' : '✓ ')); let out; try { out = typeof ev.output === 'string' ? ev.output : JSON.stringify(ev.output); } catch (e) { out = String(ev.output); } if (out.length > 900) out = out.slice(0, 900) + '…'; res.appendChild(document.createTextNode(out)); body.appendChild(res); row.appendChild(body); addRow(row); break; }
       case 'turn_start': { addRow(el('div', 'turn-sep', '新回合')); break; }
@@ -321,7 +347,7 @@
     }
   }
 
-  function clearTranscript() { column.textContent = ''; currentAssistant = null; hasMessages = false; setHero(true); }
+  function clearTranscript() { column.textContent = ''; currentAssistant = null; currentReasoning = null; hasMessages = false; setHero(true); }
 
   function send() {
     const text = input.value.trim();

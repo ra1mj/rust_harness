@@ -86,6 +86,10 @@ pub enum SessionEvent {
         message_id: MessageId,
         text: String,
     },
+    ReasoningChunk {
+        message_id: MessageId,
+        text: String,
+    },
     ToolCall {
         tool_call_id: String,
         tool_name: String,
@@ -494,7 +498,7 @@ impl Session {
                 }
                 // Chunks are replay/streaming fidelity only; model history
                 // comes from the assembled `AssistantMessage`.
-                SessionEvent::AssistantChunk { .. } => {}
+                SessionEvent::AssistantChunk { .. } | SessionEvent::ReasoningChunk { .. } => {}
                 SessionEvent::ToolCall {
                     tool_call_id,
                     tool_name,

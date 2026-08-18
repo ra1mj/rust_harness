@@ -132,6 +132,12 @@ impl Agent {
                             text: chunk,
                         });
                     }
+                    ModelEvent::Reasoning(chunk) => {
+                        self.session.append(SessionEvent::ReasoningChunk {
+                            message_id: message_id.clone(),
+                            text: chunk,
+                        });
+                    }
                     ModelEvent::ToolCall(call) => tool_calls.push(call),
                     ModelEvent::Done(reason) => finish_reason = reason,
                 }

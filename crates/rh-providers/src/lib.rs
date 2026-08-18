@@ -98,9 +98,13 @@ impl OpenAiCompatibleProvider {
 #[async_trait]
 impl ModelProvider for OpenAiCompatibleProvider {
     async fn stream(&self, request: ModelRequest) -> Result<ModelStream> {
-        let (content, tool_calls, finish_reason) = self.complete_once(&request).await?;
+        let (reasoning, content, tool_calls, finish_reason) = self.complete_once(&request).await?;
 
-        let mut events: Vec<ModelEvent> = chunk_text(&content);
+        let mut events: Vec<ModelEvent> = chunks(&reasoning)
+            .into_iter()
+            .map(ModelEvent::Reasoning)
+            .collect();
+        events.extend(chunks(&content).into_iter().map(ModelEvent::Text));
         for call in tool_calls {
             events.push(ModelEvent::ToolCall(call));
         }
@@ -114,7 +118,7 @@ impl OpenAiCompatibleProvider {
     async fn complete_once(
         &self,
         request: &ModelRequest,
-    ) -> Result<(String, Vec<ModelToolCall>, FinishReason)> {
+    ) -> Result<(String, String, Vec<ModelToolCall>, FinishReason)> {
         let messages: Vec<Value> = request
             .messages
             .iter()
@@ -189,6 +193,10 @@ impl OpenAiCompatibleProvider {
             .ok_or_else(|| anyhow!("no choices in model response"))?;
         let message = &choice["message"];
 
+        let reasoning = message["reasoning_content"]
+            .as_str()
+            .unwrap_or_default()
+            .to_string();
         let content = message["content"].as_str().unwrap_or_default().to_string();
         let tool_calls: Vec<ModelToolCall> = message["tool_calls"]
             .as_array()
@@ -216,7 +224,7 @@ impl OpenAiCompatibleProvider {
             _ => FinishReason::Stop,
         };
 
-        Ok((content, tool_calls, finish_reason))
+        Ok((reasoning, content, tool_calls, finish_reason))
     }
 }
 
@@ -411,8 +419,8 @@ impl ModelHub {
     }
 }
 
-/// Split text into fixed-size [`ModelEvent::Text`] chunks for live rendering.
-fn chunk_text(text: &str) -> Vec<ModelEvent> {
+/// Split text into fixed-size string chunks for live rendering.
+fn chunks(text: &str) -> Vec<String> {
     const CHUNK: usize = 6;
     if text.is_empty() {
         return Vec::new();
@@ -420,7 +428,7 @@ fn chunk_text(text: &str) -> Vec<ModelEvent> {
     let chars: Vec<char> = text.chars().collect();
     chars
         .chunks(CHUNK)
-        .map(|chunk| ModelEvent::Text(chunk.iter().collect()))
+        .map(|chunk| chunk.iter().collect())
         .collect()
 }
 
