@@ -21,8 +21,8 @@ cargo build
 # Web 界面（中文单页应用 + WebSocket 实时 transcript + 会话/任务/模型管理），浏览器打开 http://127.0.0.1:3080
 cargo run -- web
 # 换端口：cargo run -- web --addr 127.0.0.1:8080
-# 模型 hub 持久化到指定文件（默认 ./rh-models.json）；会话持久化目录（默认 ./.rh）
-cargo run -- web --models-file ~/.rh/models.json --data-dir ~/.rh/sessions
+# 持久化：模型 hub（默认 ./rh-models.json）、会话（默认 ./.rh）、MCP 配置（默认 ./rh-mcp.json）
+cargo run -- web --models-file ~/.rh/models.json --data-dir ~/.rh/sessions --mcp-file ~/.rh/mcp.json
 
 # headless 跑一条任务（需要 RH_API_KEY）
 cargo run -- run "please use bash to say hello"
@@ -65,15 +65,17 @@ Web 左侧栏支持完整的工作区管理：
 
 `bash`、`fs_read`、`fs_write`、`todo_write`、`web_fetch`、`web_search`、`grep`、`glob`、`task`、`task_output`、`task_wait`、`task_kill`。
 
-### MCP 支持
+### MCP 支持（含市场）
 
-在「设置 → MCP 服务器」添加任意 stdio MCP 服务器（命令 + 参数），其工具会自动桥接进 harness 的 `Tool` 注册表，模型可直接调用。配置持久化到 `--mcp-file`（默认 `rh-mcp.json`）。
+在「设置 → MCP 服务器」：
+
+- **市场**：内置 12 个精选服务器（filesystem / fetch / memory / thinking / git / sqlite / time / github / everything / puppeteer / postgres / brave-search），搜索框过滤，点「添加」一键安装（带 `<占位符>` 的会先填进命令框让你改路径）。
+- **手动**：粘贴一行启动命令（如 `npx -y @modelcontextprotocol/server-filesystem /你的/目录`），自动拆命令 + 推导名称。
+- 安装后其工具自动桥接进 harness 的 `Tool` 注册表，模型直接调用。配置持久化到 `--mcp-file`（默认 `rh-mcp.json`）。
 
 ```sh
 cargo run -- web --mcp-file ~/.rh/mcp.json
 ```
-
-示例：添加 `npx -y @modelcontextprotocol/server-filesystem /你的/目录` 即获得文件系统 MCP 工具。
 
 ## 仓库结构
 
@@ -84,8 +86,9 @@ crates/
   rh-session/ append-only SessionEvent 日志 + 任务 + 持久化 SessionStore + 导出(Markdown/JSON)
   rh-agent/   流式 ModelProvider seam、AgentBuilder、turn/step loop
   rh-tools/   能力 seam（Shell/FileSystem）+ bash/fs_read/fs_write/todo_write/web_fetch/web_search/grep/glob + 子代理任务（task/task_output/task_wait/task_kill）
-  rh-web/     axum Web 服务（中文 UI）+ WebSocket + 会话/任务/导出/模型 REST API
+  rh-web/     axum Web 服务（中文 UI）+ WebSocket + 会话/任务/导出/模型/MCP REST API
   rh-providers/ LLM 层：OpenAI 兼容 adapter + ModelHub（Provider 注册 + GET /models 发现 + 双键选择）
+  rh-mcp/     MCP client（stdio JSON-RPC）+ 工具桥接
   rh-cli/     组合根 + CLI（run/tools/dump-config/web）
 ```
 
