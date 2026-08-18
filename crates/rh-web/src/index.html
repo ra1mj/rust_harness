@@ -151,6 +151,18 @@
   .reasoning .head:hover { color: var(--text-2); }
   .reasoning .body { padding: 2px 13px 11px; font-size: 13px; line-height: 1.6; color: var(--caption); white-space: pre-wrap; word-break: break-word; max-height: 360px; overflow-y: auto; }
   .reasoning.collapsed .body { display: none; }
+
+  .toolcard { border: 1px solid var(--border); border-radius: 12px; background: var(--surface); align-self: flex-start; max-width: 100%; box-shadow: var(--shadow-sm); }
+  .toolcard .head { display: flex; align-items: center; gap: 7px; padding: 7px 13px; cursor: pointer; font-size: 12.5px; user-select: none; }
+  .toolcard .head .name { font-family: var(--mono); font-weight: 600; color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .toolcard .head .chev { color: var(--caption); font-size: 10px; flex: none; }
+  .toolcard .status { font-size: 10px; font-weight: 500; border-radius: 999px; padding: 1px 8px; flex: none; }
+  .toolcard .status.running { color: var(--accent); background: rgba(0, 113, 227, 0.1); animation: pulse 1.1s ease-in-out infinite; }
+  .toolcard .status.ok { color: var(--success); background: rgba(52, 199, 89, 0.12); }
+  .toolcard .status.err { color: var(--error); background: rgba(255, 59, 48, 0.1); }
+  .toolcard .body { padding: 0 13px 10px; font-family: var(--mono); font-size: 12px; line-height: 1.55; color: var(--text-2); white-space: pre-wrap; word-break: break-word; max-height: 300px; overflow-y: auto; }
+  .toolcard .body .sec { margin-top: 8px; color: var(--caption); font-size: 11px; font-weight: 600; }
+  .toolcard.collapsed .body { display: none; }
   .reasoning.breathing { animation: reasoning-breathe 2.2s ease-in-out infinite; }
   .reasoning.breathing .head { color: var(--accent); }
   .reasoning.breathing .head .dots::after { content: '…'; animation: dots 1.2s steps(4) infinite; display: inline-block; }
@@ -383,7 +395,7 @@
   const taskList = document.getElementById('taskList');
   const taskInput = document.getElementById('taskInput');
 
-  let ws, currentAssistant = null, currentReasoning = null, working = false, hasMessages = false;
+  let ws, currentAssistant = null, currentReasoning = null, currentTool = null, working = false, hasMessages = false;
   let currentSessionId = null;
   let currentMode = 'direct';
   let providersData = { providers: [], models: {}, active: {} };
@@ -474,21 +486,42 @@
     }
   }
 
+  function ensureTool(name) {
+    if (currentTool) return currentTool;
+    const box = el('div', 'toolcard collapsed');
+    const head = el('div', 'head');
+    const chev = el('span', 'chev', '▸');
+    head.appendChild(chev);
+    head.appendChild(el('span', 'name', '⚙ ' + name));
+    const status = el('span', 'status running', '运行中');
+    head.appendChild(status);
+    head.onclick = () => {
+      const collapsed = box.classList.toggle('collapsed');
+      chev.textContent = collapsed ? '▸' : '▾';
+    };
+    box.appendChild(head);
+    const body = el('div', 'body', '');
+    box.appendChild(body);
+    addRow(box);
+    currentTool = { box, head, body, status, chev };
+    return currentTool;
+  }
+
   function renderEvent(ev) {
     switch (ev.type) {
-      case 'user_message': { const row = el('div', 'msg-user'); row.appendChild(el('div', 'bubble', textFromContent(ev.content))); addRow(row); currentAssistant = null; closeReasoning(); break; }
+      case 'user_message': { const row = el('div', 'msg-user'); row.appendChild(el('div', 'bubble', textFromContent(ev.content))); addRow(row); currentAssistant = null; closeReasoning(); currentTool = null; break; }
       case 'assistant_chunk': { ensureAssistant().text.textContent += ev.text; scrollBottom(); break; }
       case 'reasoning_chunk': { ensureReasoning().body.textContent += ev.text; scrollBottom(); break; }
-      case 'assistant_message': { const text = textFromContent(ev.content); if (currentAssistant) { if (text && !currentAssistant.text.textContent) currentAssistant.text.textContent = text; currentAssistant = null; } else if (text) { ensureAssistant().text.textContent = text; currentAssistant = null; } closeReasoning(); break; }
-      case 'tool_call': { const row = el('div', 'msg-assistant'); row.appendChild(el('div', 'avatar', '⚙')); const body = el('div', 'body'); const chip = el('div', 'tool-call'); chip.appendChild(el('span', 'name', ev.tool_name)); chip.appendChild(document.createTextNode(' ' + JSON.stringify(ev.arguments || {}))); body.appendChild(chip); row.appendChild(body); addRow(row); currentAssistant = null; break; }
-      case 'tool_result': { const row = el('div', 'msg-assistant'); row.appendChild(el('div', 'avatar', '⚙')); const body = el('div', 'body'); const res = el('div', 'tool-result' + (ev.is_error ? ' error' : '')); res.appendChild(el('span', ev.is_error ? 'err' : 'ok', ev.is_error ? '✗ ' : '✓ ')); let out; try { out = typeof ev.output === 'string' ? ev.output : JSON.stringify(ev.output); } catch (e) { out = String(ev.output); } if (out.length > 900) out = out.slice(0, 900) + '…'; res.appendChild(document.createTextNode(out)); body.appendChild(res); row.appendChild(body); addRow(row); break; }
+      case 'assistant_message': { const text = textFromContent(ev.content); if (currentAssistant) { if (text && !currentAssistant.text.textContent) currentAssistant.text.textContent = text; currentAssistant = null; } else if (text) { ensureAssistant().text.textContent = text; currentAssistant = null; } closeReasoning(); currentTool = null; break; }
+      case 'tool_call': { ensureTool(ev.tool_name); currentTool.body.appendChild(el('div', 'sec', '参数')); currentTool.body.appendChild(document.createTextNode(JSON.stringify(ev.arguments || {}, null, 0))); currentAssistant = null; break; }
+      case 'tool_result': { if (currentTool) { let out; try { out = typeof ev.output === 'string' ? ev.output : JSON.stringify(ev.output); } catch (e) { out = String(ev.output); } if (out.length > 1200) out = out.slice(0, 1200) + '…'; currentTool.body.appendChild(el('div', 'sec', ev.is_error ? '结果（失败）' : '结果')); currentTool.body.appendChild(document.createTextNode(out)); const st = currentTool.status; st.textContent = ev.is_error ? '✗' : '✓'; st.className = 'status ' + (ev.is_error ? 'err' : 'ok'); currentTool.box.classList.add('collapsed'); currentTool = null; } break; }
       case 'turn_start': { addRow(el('div', 'turn-sep', '新回合')); break; }
       case 'workflow_step': { if (ev.mode === 'trellis') { currentMode = 'trellis'; modeDropdown.setLabel('Trellis 工作流'); renderTrellis(ev.step); } break; }
       default: break;
     }
   }
 
-  function clearTranscript() { column.textContent = ''; currentAssistant = null; currentReasoning = null; hasMessages = false; setHero(true); }
+  function clearTranscript() { column.textContent = ''; currentAssistant = null; currentReasoning = null; currentTool = null; hasMessages = false; setHero(true); }
 
   function send() {
     const text = input.value.trim();
