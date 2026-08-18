@@ -105,8 +105,8 @@ impl Agent {
                 .derive_messages(Some(&self.definition.system_prompt));
             let model_messages = ModelMessage::from_session(&messages);
 
-            let listing_ctx =
-                ToolCallContext::new(self.ctx.clone(), self.session.id(), next_call_id());
+            let listing_ctx = ToolCallContext::new(self.ctx.clone(), self.session.id(), next_call_id())
+                .with_cwd(self.session.workspace());
             let tools = self.tools.list(&listing_ctx);
 
             let request = ModelRequest {
@@ -153,8 +153,8 @@ impl Agent {
                     tool_name: call.name.clone(),
                     arguments: call.arguments.clone(),
                 });
-                let call_ctx =
-                    ToolCallContext::new(self.ctx.clone(), self.session.id(), call.id.clone());
+                let call_ctx = ToolCallContext::new(self.ctx.clone(), self.session.id(), call.id.clone())
+                    .with_cwd(self.session.workspace());
                 let (output, is_error) = self.call_tool(&call_ctx, call).await;
                 self.session.append(SessionEvent::ToolResult {
                     tool_call_id: call.id.clone(),

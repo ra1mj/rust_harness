@@ -41,6 +41,12 @@ impl ToolCallContext {
         }
     }
 
+    /// Override the working directory (the session's workspace root).
+    pub fn with_cwd(mut self, cwd: PathBuf) -> Self {
+        self.cwd = cwd;
+        self
+    }
+
     /// Resolve a capability service, or return a `missing_service` error.
     pub fn service<T: rh_core::Service + ?Sized>(
         &self,

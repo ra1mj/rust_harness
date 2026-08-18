@@ -15,6 +15,17 @@ use crate::shell::Shell;
 use crate::subagent::{SubagentManager, TaskKillTool, TaskOutputTool, TaskTool, TaskWaitTool};
 use crate::web::{WebFetchTool, WebSearchTool};
 
+/// Resolve a path against the tool's working directory (the workspace root),
+/// so relative paths never escape to the process cwd.
+fn resolve_path(ctx: &ToolCallContext, p: &str) -> std::path::PathBuf {
+    let path = std::path::Path::new(p);
+    if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        ctx.cwd.join(path)
+    }
+}
+
 /// Runs a shell command via the [`Shell`] service.
 pub struct BashTool;
 
@@ -80,13 +91,14 @@ impl Tool for FsReadTool {
     }
 
     async fn run(&self, ctx: &ToolCallContext, args: Value) -> Result<Value, ToolError> {
-        let path = args
+        let path_str = args
             .get("path")
             .and_then(Value::as_str)
             .ok_or_else(|| ToolError::execution("missing `path` argument"))?;
+        let path = resolve_path(ctx, path_str);
         let fs = ctx.service::<dyn FileSystem>("FileSystem")?;
-        let content = fs.read(std::path::Path::new(path)).await?;
-        Ok(json!({ "path": path, "content": content }))
+        let content = fs.read(&path).await?;
+        Ok(json!({ "path": path.display().to_string(), "content": content }))
     }
 }
 
@@ -115,7 +127,7 @@ impl Tool for FsWriteTool {
     }
 
     async fn run(&self, ctx: &ToolCallContext, args: Value) -> Result<Value, ToolError> {
-        let path = args
+        let path_str = args
             .get("path")
             .and_then(Value::as_str)
             .ok_or_else(|| ToolError::execution("missing `path` argument"))?;
@@ -123,9 +135,10 @@ impl Tool for FsWriteTool {
             .get("content")
             .and_then(Value::as_str)
             .ok_or_else(|| ToolError::execution("missing `content` argument"))?;
+        let path = resolve_path(ctx, path_str);
         let fs = ctx.service::<dyn FileSystem>("FileSystem")?;
-        fs.write(std::path::Path::new(path), content).await?;
-        Ok(json!({ "path": path, "written": content.len() }))
+        fs.write(&path, content).await?;
+        Ok(json!({ "path": path.display().to_string(), "written": content.len() }))
     }
 }
 

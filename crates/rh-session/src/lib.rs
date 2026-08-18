@@ -17,8 +17,8 @@ mod session;
 
 pub use ids::{next_id, IdKind};
 pub use session::{
-    ContentBlock, Message, Role, Session, SessionEvent, SessionMeta, SessionPlugin,
-    SessionRecord, SessionStore, TaskItem,
+    workspace_context, ContentBlock, Message, Role, Session, SessionEvent, SessionMeta,
+    SessionPlugin, SessionRecord, SessionStore, TaskItem,
 };
 
 /// Identity of a session.

@@ -15,7 +15,7 @@ use serde_json::json;
 use tokio::sync::mpsc;
 
 use rh_agent::{AgentBuilder, AgentDefinition};
-use rh_session::{Session, SessionStore};
+use rh_session::{workspace_context, Session, SessionStore};
 
 use crate::AppState;
 
@@ -141,10 +141,17 @@ async fn run_turn(state: &AppState, session: Arc<Session>, input: &str) -> anyho
     // subagents it spawns resolve the same model (dsh: model adapter is a
     // plugin). Held for this turn only.
     let _registration = state.ctx.provide_named("ModelProvider", provider);
+
+    // Inject workspace context (root, contents, git) into the system prompt.
+    let workspace_summary = workspace_context(&session.workspace());
+    let system_prompt = format!(
+        "You are a Rust harness agent. Use tools when useful.\n\n{workspace_summary}"
+    );
+
     let definition = AgentDefinition {
         name: "rh-web".to_string(),
         model: model_info.id.clone(),
-        system_prompt: "You are a Rust harness agent. Use tools when useful.".to_string(),
+        system_prompt,
         tool_ids: Vec::new(),
         max_steps: 8,
     };

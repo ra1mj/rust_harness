@@ -58,6 +58,7 @@ Web 左侧栏支持完整的工作区管理：
 - **会话**：`＋ 新会话` 创建；点击切换；双击重命名；悬停 `×` 删除。会话持久化到 `--data-dir`（每个会话一个 JSON 文件），重启后仍在。
 - **任务（todo）**：每会话一个 todo 清单，输入框添加、勾选完成；agent 的 `todo_write` 工具也写入当前会话任务。
 - **子代理任务（Codex 式）**：agent 可用 `task` 工具 spawn 子代理（独立 session + 模型 + 工具状态），`run_in_background` 后台、`task_output`/`task_wait` 取结果、`task_kill` 取消 —— 这是 grok-build 从 openai/codex 移植的任务模型。
+- **工作区（Codex 式）**：每个会话有自己的工作区文件夹（默认 `~/.rh/workspaces/<session-id>`，隔离于 harness 自身目录），可在侧栏「工作区 → 更改」指向任意文件夹；`bash`/`fs_read`/`fs_write`/`grep`/`glob` 都作用于该工作区，工作区内容 + git 状态注入 system prompt 作为上下文。
 - **导出**：`导出 Markdown` / `导出 JSON` 下载当前会话 transcript（含任务）。
 
 ### 内置工具

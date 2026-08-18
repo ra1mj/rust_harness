@@ -162,6 +162,8 @@
     <div class="side-scroll">
       <div class="side-label">会话</div>
       <div id="sessionList"></div>
+      <div class="side-label">工作区 <button class="mini" id="wsChangeBtn">更改</button></div>
+      <div id="workspaceBox"><div class="hint">加载中…</div></div>
       <div class="side-label">任务 <button class="mini" id="taskAddBtn" style="display:none">＋</button></div>
       <div id="taskList"><div class="hint">暂无任务</div></div>
       <div class="add-task"><input id="taskInput" placeholder="添加任务…" /><button id="taskAdd">加</button></div>
@@ -326,13 +328,13 @@
       const rec = await (await fetch('/api/sessions/' + encodeURIComponent(id))).json();
       (rec.events || []).forEach(renderEvent);
     } catch (err) {}
-    loadSessions(); loadTasks();
+    loadSessions(); loadTasks(); loadWorkspace();
     if (ws) ws.close(); else connect();
   }
   async function newSession() {
     let data; try { data = await (await fetch('/api/sessions', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) })).json(); } catch (err) { return; }
     const id = data.created; loadSessions();
-    currentSessionId = id; clearTranscript(); loadTasks();
+    currentSessionId = id; clearTranscript(); loadTasks(); loadWorkspace();
     if (ws) ws.close(); else connect();
   }
   async function renameSessionPrompt(id, old) {
@@ -354,6 +356,26 @@
   }
 
   // ---------- tasks ----------
+  async function loadWorkspace() {
+    const box = document.getElementById('workspaceBox');
+    if (!currentSessionId) { box.textContent = ''; return; }
+    try {
+      const data = await (await fetch('/api/sessions/' + encodeURIComponent(currentSessionId) + '/workspace')).json();
+      box.textContent = '';
+      box.appendChild(el('div', 'hint', '📁 ' + data.root));
+      const lines = (data.context || '').split('\n').filter(Boolean).slice(1, 9);
+      lines.forEach(l => box.appendChild(el('div', 'hint', l)));
+    } catch (err) { box.textContent = '加载失败'; }
+  }
+  async function changeWorkspace() {
+    if (!currentSessionId) return;
+    const cur = await (await fetch('/api/sessions/' + encodeURIComponent(currentSessionId) + '/workspace')).json();
+    const root = prompt('工作区文件夹（绝对路径）', cur.root);
+    if (!root || root === cur.root) return;
+    await fetch('/api/sessions/' + encodeURIComponent(currentSessionId) + '/workspace', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ root }) });
+    loadWorkspace();
+  }
+
   async function loadTasks() {
     if (!currentSessionId) { taskList.textContent = ''; taskList.appendChild(el('div', 'hint', '暂无任务')); return; }
     let data; try { data = await (await fetch('/api/sessions/' + encodeURIComponent(currentSessionId) + '/tasks')).json(); } catch (err) { return; }
@@ -440,6 +462,7 @@
 
   // ---------- wiring ----------
   document.getElementById('newSession').onclick = newSession;
+  document.getElementById('wsChangeBtn').onclick = changeWorkspace;
   document.getElementById('settingsBtn').onclick = () => { overlay.classList.remove('hidden'); loadProviders(); };
   document.getElementById('closeBtn').onclick = () => overlay.classList.add('hidden');
   overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.classList.add('hidden'); });
@@ -465,7 +488,7 @@
       const rec = await (await fetch('/api/sessions/' + encodeURIComponent(currentSessionId))).json();
       (rec.events || []).forEach(renderEvent);
     } catch (err) {}
-    loadTasks();
+    loadTasks(); loadWorkspace();
     connect();
   })();
 })();

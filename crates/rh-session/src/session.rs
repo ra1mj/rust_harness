@@ -137,6 +137,42 @@ pub struct SessionRecord {
     pub created_at: u64,
     pub events: Vec<SessionEvent>,
     pub tasks: Vec<TaskItem>,
+    #[serde(default)]
+    pub workspace: Option<PathBuf>,
+}
+
+/// Default isolated workspace root for a session (per-session folder, so the
+/// agent never operates on the harness's own directory by default).
+fn default_workspace(id: &str) -> PathBuf {
+    let home = std::env::var("HOME").map(PathBuf::from).unwrap_or_else(|_| PathBuf::from("."));
+    home.join(".rh").join("workspaces").join(id)
+}
+
+/// Human-readable workspace context for prompt injection: the root path, its
+/// top-level contents, and whether it is a git repo.
+pub fn workspace_context(root: &std::path::Path) -> String {
+    let mut out = format!("工作区目录：{}\n", root.display());
+    match std::fs::read_dir(root) {
+        Ok(entries) => {
+            let mut items: Vec<String> = entries
+                .flatten()
+                .map(|e| {
+                    let name = e.file_name().to_string_lossy().to_string();
+                    let mark = if e.path().is_dir() { "📁" } else { "📄" };
+                    format!("{mark} {name}")
+                })
+                .collect();
+            items.sort();
+            let shown = items.into_iter().take(50).collect::<Vec<_>>().join("\n");
+            out.push_str(&format!("目录内容：\n{}\n", if shown.is_empty() { "(空)" } else { &shown }));
+        }
+        Err(_) => out.push_str("目录内容：(不可读)\n"),
+    }
+    out.push_str(&format!(
+        "Git 仓库：{}\n",
+        if root.join(".git").exists() { "是" } else { "否" }
+    ));
+    out
 }
 
 fn now_millis() -> u64 {
@@ -160,6 +196,7 @@ pub struct Session {
     title: Arc<RwLock<String>>,
     tasks: Arc<RwLock<Vec<TaskItem>>>,
     created_at: u64,
+    workspace: Arc<RwLock<PathBuf>>,
 }
 
 impl Session {
@@ -170,20 +207,26 @@ impl Session {
 
     /// Create a new, empty session with the given title.
     pub fn with_title(id: impl Into<String>, title: String, sink: Option<Context>) -> Arc<Self> {
+        let id = id.into();
+        let workspace = default_workspace(&id);
         let (live, _) = tokio::sync::broadcast::channel(256);
         Arc::new(Self {
-            id: id.into(),
+            id,
             events: Arc::new(RwLock::new(Vec::new())),
             sink,
             live,
             title: Arc::new(RwLock::new(title)),
             tasks: Arc::new(RwLock::new(Vec::new())),
             created_at: now_millis(),
+            workspace: Arc::new(RwLock::new(workspace)),
         })
     }
 
     /// Rebuild a session from a persisted record.
     pub fn from_record(record: SessionRecord, sink: Option<Context>) -> Arc<Self> {
+        let workspace = record
+            .workspace
+            .unwrap_or_else(|| default_workspace(&record.id));
         let (live, _) = tokio::sync::broadcast::channel(256);
         Arc::new(Self {
             id: record.id,
@@ -193,6 +236,7 @@ impl Session {
             title: Arc::new(RwLock::new(record.title)),
             tasks: Arc::new(RwLock::new(record.tasks)),
             created_at: record.created_at,
+            workspace: Arc::new(RwLock::new(workspace)),
         })
     }
 
@@ -236,6 +280,21 @@ impl Session {
         } else {
             false
         }
+    }
+
+    /// The session's workspace root (created on demand).
+    pub fn workspace(&self) -> PathBuf {
+        let root = self.workspace.read().expect("workspace poisoned").clone();
+        let _ = std::fs::create_dir_all(&root);
+        root
+    }
+
+    /// Point this session at a different workspace folder.
+    pub fn set_workspace(&self, root: impl Into<PathBuf>) -> PathBuf {
+        let root = root.into();
+        let _ = std::fs::create_dir_all(&root);
+        *self.workspace.write().expect("workspace poisoned") = root.clone();
+        root
     }
 
     /// Subscribe to this session's live event stream (e.g. for a WebSocket).
@@ -284,6 +343,7 @@ impl Session {
             created_at: self.created_at,
             events: self.events(),
             tasks: self.tasks(),
+            workspace: Some(self.workspace()),
         }
     }
 
@@ -400,9 +460,11 @@ impl Session {
 
     /// Fork this session: a new id over a copy of the current log.
     pub fn fork(&self, new_id: impl Into<String>) -> Arc<Self> {
+        let new_id = new_id.into();
         let (live, _) = tokio::sync::broadcast::channel(256);
         Arc::new(Self {
-            id: new_id.into(),
+            workspace: Arc::new(RwLock::new(default_workspace(&new_id))),
+            id: new_id,
             events: Arc::new(RwLock::new(self.events())),
             sink: self.sink.clone(),
             live,

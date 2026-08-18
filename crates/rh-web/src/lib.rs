@@ -22,7 +22,7 @@ use serde_json::{json, Value};
 
 use rh_core::Context;
 use rh_providers::{ModelHub, ProviderConfig};
-use rh_session::{SessionStore, TaskItem};
+use rh_session::{workspace_context, SessionStore, TaskItem};
 use rh_tool::{ToolCallContext, ToolRegistry};
 
 const INDEX: &str = include_str!("index.html");
@@ -70,6 +70,7 @@ pub async fn serve(
         .route("/api/sessions/{id}/export", get(export_session))
         .route("/api/sessions/{id}/tasks", get(list_tasks).post(add_task))
         .route("/api/sessions/{id}/tasks/{task_id}", patch(set_task_done))
+        .route("/api/sessions/{id}/workspace", get(get_workspace).post(set_workspace))
         .route("/ws", get(ws::upgrade))
         .with_state(state);
 
@@ -321,6 +322,42 @@ async fn add_task(
         .save(&session)
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
     Ok(Json(json!({ "tasks": session.tasks(), "added": item.id })))
+}
+
+async fn get_workspace(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> Result<Json<Value>, (StatusCode, String)> {
+    let session = store(&state)
+        .get(&id)
+        .ok_or_else(|| (StatusCode::NOT_FOUND, "session not found".to_string()))?;
+    let root = session.workspace();
+    Ok(Json(json!({
+        "root": root.display().to_string(),
+        "context": workspace_context(&root),
+    })))
+}
+
+async fn set_workspace(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    Json(body): Json<Value>,
+) -> Result<Json<Value>, (StatusCode, String)> {
+    let root = body
+        .get("root")
+        .and_then(Value::as_str)
+        .ok_or_else(|| (StatusCode::BAD_REQUEST, "缺少 root".to_string()))?;
+    let session = store(&state)
+        .get(&id)
+        .ok_or_else(|| (StatusCode::NOT_FOUND, "session not found".to_string()))?;
+    let root = session.set_workspace(PathBuf::from(root));
+    store(&state)
+        .save(&session)
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    Ok(Json(json!({
+        "root": root.display().to_string(),
+        "context": workspace_context(&root),
+    })))
 }
 
 async fn set_task_done(
