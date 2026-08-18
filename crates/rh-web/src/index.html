@@ -127,6 +127,14 @@
   .reasoning .head:hover { color: var(--ds-text-secondary); }
   .reasoning .body { padding: 2px 12px 10px; font-size: 13px; color: var(--ds-caption); white-space: pre-wrap; word-break: break-word; max-height: 360px; overflow-y: auto; }
   .reasoning.collapsed .body { display: none; }
+  .reasoning.breathing { animation: reasoning-breathe 2.2s ease-in-out infinite; }
+  .reasoning.breathing .head { color: var(--ds-brand); }
+  .reasoning.breathing .head .dots::after { content: '…'; animation: dots 1.2s steps(4) infinite; display: inline-block; }
+  @keyframes reasoning-breathe {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(65, 118, 230, 0); border-color: var(--ds-border); }
+    50% { box-shadow: 0 0 0 4px rgba(65, 118, 230, 0.12); border-color: rgba(65, 118, 230, 0.45); }
+  }
+  @keyframes dots { 0% { width: 0; } 100% { width: 1em; } }
 
   .composer { flex: none; display: flex; flex-direction: column; align-items: center; padding: 8px 16px 16px; }
   .card { box-sizing: border-box; display: flex; flex-direction: column; gap: 10px; width: 100%; max-width: var(--ds-composer-width); border: 1px solid var(--ds-border-strong); border-radius: 22px; background: var(--ds-bg); box-shadow: var(--ds-shadow); padding: 10px 10px 6px; }
@@ -316,11 +324,12 @@
 
   function ensureReasoning() {
     if (currentReasoning) return currentReasoning;
-    const box = el('div', 'reasoning collapsed');
+    const box = el('div', 'reasoning collapsed breathing');
     const head = el('div', 'head');
     const chev = el('span', '', '▸');
     head.appendChild(chev);
-    head.appendChild(el('span', '', '思考过程'));
+    head.appendChild(el('span', '', '思考中'));
+    head.appendChild(el('span', 'dots', ''));
     head.onclick = () => {
       const collapsed = box.classList.toggle('collapsed');
       chev.textContent = collapsed ? '▸' : '▾';
@@ -329,16 +338,26 @@
     const body = el('div', 'body', '');
     box.appendChild(body);
     addRow(box);
-    currentReasoning = { body };
+    currentReasoning = { body, box };
     return currentReasoning;
+  }
+  function closeReasoning() {
+    if (currentReasoning) {
+      currentReasoning.box.classList.remove('breathing');
+      const label = currentReasoning.box.querySelector('.head span:nth-child(2)');
+      if (label) label.textContent = '思考过程';
+      const dots = currentReasoning.box.querySelector('.dots');
+      if (dots) dots.remove();
+      currentReasoning = null;
+    }
   }
 
   function renderEvent(ev) {
     switch (ev.type) {
-      case 'user_message': { const row = el('div', 'msg-user'); row.appendChild(el('div', 'bubble', textFromContent(ev.content))); addRow(row); currentAssistant = null; currentReasoning = null; break; }
+      case 'user_message': { const row = el('div', 'msg-user'); row.appendChild(el('div', 'bubble', textFromContent(ev.content))); addRow(row); currentAssistant = null; closeReasoning(); break; }
       case 'assistant_chunk': { ensureAssistant().text.textContent += ev.text; scrollBottom(); break; }
       case 'reasoning_chunk': { ensureReasoning().body.textContent += ev.text; scrollBottom(); break; }
-      case 'assistant_message': { const text = textFromContent(ev.content); if (currentAssistant) { if (text && !currentAssistant.text.textContent) currentAssistant.text.textContent = text; currentAssistant = null; } else if (text) { ensureAssistant().text.textContent = text; currentAssistant = null; } currentReasoning = null; break; }
+      case 'assistant_message': { const text = textFromContent(ev.content); if (currentAssistant) { if (text && !currentAssistant.text.textContent) currentAssistant.text.textContent = text; currentAssistant = null; } else if (text) { ensureAssistant().text.textContent = text; currentAssistant = null; } closeReasoning(); break; }
       case 'tool_call': { const row = el('div', 'msg-assistant'); row.appendChild(el('div', 'avatar', '⚙')); const body = el('div', 'body'); const chip = el('div', 'tool-call'); chip.appendChild(el('span', 'name', ev.tool_name)); chip.appendChild(document.createTextNode(' ' + JSON.stringify(ev.arguments || {}))); body.appendChild(chip); row.appendChild(body); addRow(row); currentAssistant = null; break; }
       case 'tool_result': { const row = el('div', 'msg-assistant'); row.appendChild(el('div', 'avatar', '⚙')); const body = el('div', 'body'); const res = el('div', 'tool-result' + (ev.is_error ? ' error' : '')); res.appendChild(el('span', ev.is_error ? 'err' : 'ok', ev.is_error ? '✗ ' : '✓ ')); let out; try { out = typeof ev.output === 'string' ? ev.output : JSON.stringify(ev.output); } catch (e) { out = String(ev.output); } if (out.length > 900) out = out.slice(0, 900) + '…'; res.appendChild(document.createTextNode(out)); body.appendChild(res); row.appendChild(body); addRow(row); break; }
       case 'turn_start': { addRow(el('div', 'turn-sep', '新回合')); break; }
