@@ -195,7 +195,11 @@
     max-height: 320px; overflow-y: auto;
   }
   .dropdown.open .dropdown-menu { display: block; animation: menu-in .18s var(--ease); }
+  .dropdown.drop-up .dropdown-menu { top: auto; bottom: calc(100% + 8px); }
+  .dropdown.align-right .dropdown-menu { left: auto; right: 0; }
   @keyframes menu-in { from { opacity: 0; transform: translateY(-4px) scale(0.98); } to { opacity: 1; transform: none; } }
+  .dropdown.drop-up .dropdown-menu { animation-name: menu-in-up; }
+  @keyframes menu-in-up { from { opacity: 0; transform: translateY(4px) scale(0.98); } to { opacity: 1; transform: none; } }
   .dropdown-group { font-size: 11px; font-weight: 600; color: var(--caption); padding: 9px 12px 4px; text-transform: uppercase; letter-spacing: .4px; }
   .dropdown-item { padding: 9px 12px; border-radius: 10px; font-size: 13.5px; cursor: pointer; color: var(--text-2); transition: background .1s; }
   .dropdown-item:hover { background: var(--hover); }
@@ -394,7 +398,17 @@
     btn.onclick = (e) => {
       e.stopPropagation();
       document.querySelectorAll('.dropdown.open').forEach(d => { if (d !== dd) d.classList.remove('open'); });
+      const willOpen = !dd.classList.contains('open');
       dd.classList.toggle('open');
+      if (willOpen) {
+        const menu = dd.querySelector('.dropdown-menu');
+        const rect = btn.getBoundingClientRect();
+        dd.classList.remove('drop-up', 'align-right');
+        const mh = menu.offsetHeight;
+        const mw = menu.offsetWidth;
+        if (rect.bottom + mh + 12 > window.innerHeight) dd.classList.add('drop-up');
+        if (rect.left + mw > window.innerWidth - 8) dd.classList.add('align-right');
+      }
     };
     document.addEventListener('click', () => dd.classList.remove('open'));
     return {
