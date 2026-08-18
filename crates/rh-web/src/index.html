@@ -172,15 +172,34 @@
   .card textarea { width: 100%; resize: none; border: none; outline: none; background: transparent; color: var(--text); font-size: 16px; line-height: 1.5; padding: 4px 12px 0 14px; min-height: 32px; max-height: 200px; }
   .card textarea::placeholder { color: var(--caption); }
   .card .row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 2px 8px 4px; }
-  .model-select {
-    appearance: none; -webkit-appearance: none; max-width: 260px; height: 30px;
-    padding: 0 24px 0 12px; border: none; border-radius: 10px; outline: none;
-    background-color: transparent;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12' fill='none'%3E%3Cpath d='M3 4.5L6 7.5L9 4.5' stroke='%2386868B' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
-    background-repeat: no-repeat; background-position: right 8px center;
-    color: var(--text-2); font-size: 13px; font-weight: 500; cursor: pointer; text-overflow: ellipsis;
+  /* Custom rounded dropdown (replaces native <select>) */
+  .dropdown { position: relative; }
+  .dropdown-btn {
+    display: flex; align-items: center; gap: 6px;
+    max-width: 260px; height: 32px; padding: 0 13px;
+    border: 1px solid var(--border-2); border-radius: 999px; outline: none;
+    background: var(--surface); color: var(--text-2);
+    font-size: 13px; font-weight: 500; cursor: pointer;
+    box-shadow: var(--shadow-sm);
+    transition: background .15s var(--ease), border-color .15s var(--ease), box-shadow .15s var(--ease);
   }
-  .model-select:hover { background-color: var(--hover); }
+  .dropdown-btn:hover { background: var(--hover); border-color: var(--accent); }
+  .dropdown-btn:active { transform: scale(0.97); }
+  .dropdown-btn .label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .dropdown-btn .chev { font-size: 10px; color: var(--caption); transition: transform .2s var(--ease); }
+  .dropdown.open .dropdown-btn .chev { transform: rotate(180deg); }
+  .dropdown-menu {
+    position: absolute; top: calc(100% + 8px); left: 0; min-width: 200px; max-width: 320px;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 16px;
+    box-shadow: var(--shadow-lg); padding: 6px; z-index: 60; display: none;
+    max-height: 320px; overflow-y: auto;
+  }
+  .dropdown.open .dropdown-menu { display: block; animation: menu-in .18s var(--ease); }
+  @keyframes menu-in { from { opacity: 0; transform: translateY(-4px) scale(0.98); } to { opacity: 1; transform: none; } }
+  .dropdown-group { font-size: 11px; font-weight: 600; color: var(--caption); padding: 9px 12px 4px; text-transform: uppercase; letter-spacing: .4px; }
+  .dropdown-item { padding: 9px 12px; border-radius: 10px; font-size: 13.5px; cursor: pointer; color: var(--text-2); transition: background .1s; }
+  .dropdown-item:hover { background: var(--hover); }
+  .dropdown-item.selected { color: var(--accent); font-weight: 500; background: rgba(0,113,227,0.08); }
   .send { display: grid; place-items: center; width: 36px; height: 36px; flex: none; border: none; border-radius: 999px; background: var(--accent); color: #fff; cursor: pointer; box-shadow: 0 2px 8px rgba(0,113,227,0.3); transition: background .15s var(--ease), transform .1s var(--ease), opacity .1s; }
   .send:hover:not(:disabled) { background: var(--accent-hover); }
   .send:active:not(:disabled) { transform: scale(0.94); }
@@ -234,6 +253,22 @@
   button.primary { background: var(--accent); border: none; color: #fff; border-radius: 11px; padding: 10px 18px; font-weight: 500; cursor: pointer; font-size: 13px; align-self: flex-start; transition: background .15s var(--ease); }
   button.primary:hover { background: var(--accent-hover); }
   .modal-foot { display: flex; justify-content: flex-end; margin-top: 18px; }
+
+  /* Interaction feedback */
+  button { -webkit-tap-highlight-color: transparent; }
+  button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  button:not(:disabled) { cursor: pointer; }
+  button.small, button.primary, .model-chip, .dropdown-item, .session-item, .task-item,
+  .side-foot button, .export-row button, .mkt .row button {
+    transition: background .14s var(--ease), color .14s var(--ease), border-color .14s var(--ease), transform .1s var(--ease);
+  }
+  button.small:active, button.primary:active, .model-chip:active, .session-item:active,
+  .task-item:active, .side-foot button:active, .export-row button:active, .dropdown-item:active,
+  .new-session:active { transform: scale(0.97); }
+  button.small:active { background: var(--hover); }
+  .model-chip:active { background: rgba(0,113,227,0.12); }
+  .dropdown-item:active { background: var(--hover); }
+
   .hidden { display: none; }
 </style>
 </head>
@@ -275,12 +310,14 @@
       <div class="card">
         <textarea id="input" placeholder="给 Rust Harness 发送消息…" rows="1"></textarea>
         <div class="row">
-          <select class="model-select" id="modeSelect" title="工作模式">
-            <option value="direct">直接对话</option>
-            <option value="plan">计划模式</option>
-            <option value="trellis">Trellis 工作流</option>
-          </select>
-          <select class="model-select" id="modelSelect" title="选择模型"></select>
+          <div class="dropdown" id="modeDropdown">
+            <button class="dropdown-btn" type="button"><span class="label">直接对话</span><span class="chev">▾</span></button>
+            <div class="dropdown-menu"></div>
+          </div>
+          <div class="dropdown" id="modelDropdown">
+            <button class="dropdown-btn" type="button"><span class="label">选择模型</span><span class="chev">▾</span></button>
+            <div class="dropdown-menu"></div>
+          </div>
           <button class="send" id="send" title="发送" aria-label="发送">
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 13V3M8 3L4 7M8 3L12 7" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
           </button>
@@ -333,7 +370,6 @@
   const hero = document.getElementById('hero');
   const input = document.getElementById('input');
   const sendBtn = document.getElementById('send');
-  const modelSelect = document.getElementById('modelSelect');
   const dot = document.getElementById('dot');
   const statusText = document.getElementById('statusText');
   const overlay = document.getElementById('overlay');
@@ -349,6 +385,32 @@
   let providersData = { providers: [], models: {}, active: {} };
 
   function el(tag, cls, text) { const n = document.createElement(tag); if (cls) n.className = cls; if (text !== undefined) n.textContent = text; return n; }
+
+  function makeDropdown(id, onChange) {
+    const dd = document.getElementById(id);
+    const btn = dd.querySelector('.dropdown-btn');
+    const menu = dd.querySelector('.dropdown-menu');
+    const label = btn.querySelector('.label');
+    btn.onclick = (e) => {
+      e.stopPropagation();
+      document.querySelectorAll('.dropdown.open').forEach(d => { if (d !== dd) d.classList.remove('open'); });
+      dd.classList.toggle('open');
+    };
+    document.addEventListener('click', () => dd.classList.remove('open'));
+    return {
+      setLabel(text) { label.textContent = text; },
+      setItems(items) {
+        menu.textContent = '';
+        let lastGroup = '';
+        items.forEach(it => {
+          if (it.group && it.group !== lastGroup) { menu.appendChild(el('div', 'dropdown-group', it.group)); lastGroup = it.group; }
+          const d = el('div', 'dropdown-item' + (it.selected ? ' selected' : ''), it.label);
+          d.onclick = () => { dd.classList.remove('open'); onChange(it.value); };
+          menu.appendChild(d);
+        });
+      }
+    };
+  }
   function setStatus(s, t) { dot.className = 'status-dot ' + s; statusText.textContent = t; }
   function setWorking(on) { working = on; sendBtn.disabled = on; setStatus(on ? 'working' : 'on', on ? '工作中…' : '已连接'); }
   function setHero(show) { hero.classList.toggle('hidden', !show); }
@@ -407,7 +469,7 @@
       case 'tool_call': { const row = el('div', 'msg-assistant'); row.appendChild(el('div', 'avatar', '⚙')); const body = el('div', 'body'); const chip = el('div', 'tool-call'); chip.appendChild(el('span', 'name', ev.tool_name)); chip.appendChild(document.createTextNode(' ' + JSON.stringify(ev.arguments || {}))); body.appendChild(chip); row.appendChild(body); addRow(row); currentAssistant = null; break; }
       case 'tool_result': { const row = el('div', 'msg-assistant'); row.appendChild(el('div', 'avatar', '⚙')); const body = el('div', 'body'); const res = el('div', 'tool-result' + (ev.is_error ? ' error' : '')); res.appendChild(el('span', ev.is_error ? 'err' : 'ok', ev.is_error ? '✗ ' : '✓ ')); let out; try { out = typeof ev.output === 'string' ? ev.output : JSON.stringify(ev.output); } catch (e) { out = String(ev.output); } if (out.length > 900) out = out.slice(0, 900) + '…'; res.appendChild(document.createTextNode(out)); body.appendChild(res); row.appendChild(body); addRow(row); break; }
       case 'turn_start': { addRow(el('div', 'turn-sep', '新回合')); break; }
-      case 'workflow_step': { if (ev.mode === 'trellis') { currentMode = 'trellis'; document.getElementById('modeSelect').value = 'trellis'; renderTrellis(ev.step); } break; }
+      case 'workflow_step': { if (ev.mode === 'trellis') { currentMode = 'trellis'; modeDropdown.setLabel('Trellis 工作流'); renderTrellis(ev.step); } break; }
       default: break;
     }
   }
@@ -542,21 +604,29 @@
       s.classList.toggle('done', idx >= 0 && si < idx);
     });
   }
+  const MODE_LABELS = { direct: '直接对话', plan: '计划模式', trellis: 'Trellis 工作流' };
+  const modeDropdown = makeDropdown('modeDropdown', async (v) => {
+    currentMode = v;
+    modeDropdown.setLabel(MODE_LABELS[v] || v);
+    renderTrellis(null);
+    if (!currentSessionId) return;
+    await fetch('/api/sessions/' + encodeURIComponent(currentSessionId) + '/mode', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: v }) });
+  });
+  modeDropdown.setItems([
+    { label: '直接对话', value: 'direct' },
+    { label: '计划模式', value: 'plan' },
+    { label: 'Trellis 工作流', value: 'trellis' },
+  ]);
+
   async function loadMode() {
-    if (!currentSessionId) { currentMode = 'direct'; renderTrellis(null); return; }
+    if (!currentSessionId) { currentMode = 'direct'; modeDropdown.setLabel('直接对话'); renderTrellis(null); return; }
     try {
       const data = await (await fetch('/api/sessions/' + encodeURIComponent(currentSessionId) + '/mode')).json();
       currentMode = data.mode || 'direct';
-      document.getElementById('modeSelect').value = currentMode;
+      modeDropdown.setLabel(MODE_LABELS[currentMode] || '直接对话');
       renderTrellis(data.phase);
     } catch (e) {}
   }
-  document.getElementById('modeSelect').addEventListener('change', async (e) => {
-    currentMode = e.target.value;
-    renderTrellis(null);
-    if (!currentSessionId) return;
-    await fetch('/api/sessions/' + encodeURIComponent(currentSessionId) + '/mode', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: currentMode }) });
-  });
 
   async function loadTasks() {
     if (!currentSessionId) { taskList.textContent = ''; taskList.appendChild(el('div', 'hint', '暂无任务')); return; }
@@ -660,18 +730,29 @@
       box.appendChild(chips); providerList.appendChild(box);
     });
   }
+  const modelDropdown = makeDropdown('modelDropdown', (v) => {
+    if (!v) return;
+    const [provider, model] = v.split('||');
+    selectModel(provider, model);
+  });
   function renderModelSelect() {
     const { providers, models, active } = providersData;
-    modelSelect.textContent = '';
-    if (!providers.length) { modelSelect.appendChild(new Option('未配置模型', '')); modelSelect.disabled = true; return; }
-    modelSelect.disabled = false;
-    providers.forEach(p => { const g = document.createElement('optgroup'); g.label = p.name; (models[p.id] || []).forEach(m => { const o = new Option(m.id, p.id + '||' + m.id); o.selected = (active.provider === p.id && active.model === m.id); g.appendChild(o); }); modelSelect.appendChild(g); });
+    if (!providers.length) { modelDropdown.setLabel('未配置模型'); modelDropdown.setItems([]); return; }
+    const items = [];
+    let activeLabel = '选择模型';
+    providers.forEach(p => {
+      (models[p.id] || []).forEach(m => {
+        const selected = active.provider === p.id && active.model === m.id;
+        if (selected) activeLabel = m.id;
+        items.push({ label: m.id, value: p.id + '||' + m.id, group: p.name, selected });
+      });
+    });
+    modelDropdown.setLabel(activeLabel);
+    modelDropdown.setItems(items);
   }
   async function discoverModels(id) { await fetch('/api/providers/' + encodeURIComponent(id) + '/discover', { method: 'POST' }); loadProviders(); }
   async function removeProvider(id) { if (!confirm('删除该 Provider？')) return; await fetch('/api/providers/' + encodeURIComponent(id), { method: 'DELETE' }); loadProviders(); }
   async function selectModel(provider, model) { await fetch('/api/active', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ provider, model }) }); loadProviders(); }
-
-  modelSelect.addEventListener('change', () => { const v = modelSelect.value; if (!v) return; const [provider, model] = v.split('||'); selectModel(provider, model); });
   addForm.addEventListener('submit', async (e) => { e.preventDefault(); const f = new FormData(addForm); await fetch('/api/providers', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: '', name: f.get('name'), base_url: f.get('base_url'), api_key: f.get('api_key') }) }); addForm.reset(); loadProviders(); });
 
   // ---------- MCP ----------
