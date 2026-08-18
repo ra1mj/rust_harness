@@ -46,6 +46,9 @@ enum Command {
         /// File MCP server configs are persisted to.
         #[arg(long, default_value = "rh-mcp.json")]
         mcp_file: String,
+        /// Directory user skills are loaded from.
+        #[arg(long, default_value = "skills")]
+        skills_dir: String,
     },
 }
 
@@ -61,6 +64,7 @@ async fn main() -> anyhow::Result<()> {
             models_file,
             data_dir,
             mcp_file,
+            skills_dir,
         } => {
             let assembled = assemble()?;
             let plugins = assembled.plugins.iter().map(|s| s.to_string()).collect();
@@ -71,6 +75,7 @@ async fn main() -> anyhow::Result<()> {
                 models_file.into(),
                 data_dir.into(),
                 mcp_file.into(),
+                skills_dir.into(),
             )
             .await
         }

@@ -26,6 +26,7 @@ use rh_mcp::McpServerConfig;
 use rh_providers::{ModelHub, ProviderConfig};
 use rh_session::{workspace_context, SessionStore, TaskItem};
 use rh_tool::{ToolCallContext, ToolRegistry};
+use rh_tools::SkillStore;
 
 use mcp::McpHub;
 
@@ -48,11 +49,16 @@ pub async fn serve(
     models_file: PathBuf,
     data_dir: PathBuf,
     mcp_file: PathBuf,
+    skills_dir: PathBuf,
 ) -> anyhow::Result<()> {
     // Replace the in-memory session store with a persistent one (one JSON
     // file per session under `data_dir`). Held for the server lifetime.
     let store = Arc::new(SessionStore::persistent(data_dir, Some(ctx.clone())));
     let _store_registration = ctx.provide_named("SessionStore", store);
+
+    // Replace the built-in-only skill store with one that also loads user
+    // skills from `skills_dir`.
+    let _skills_registration = ctx.provide_named("SkillStore", SkillStore::new(Some(skills_dir)));
 
     let mcp = McpHub::load(mcp_file);
     mcp.connect_all(&ctx).await;
@@ -67,6 +73,7 @@ pub async fn serve(
     let app = Router::new()
         .route("/", get(index))
         .route("/api/tools", get(tools))
+        .route("/api/skills", get(skills))
         .route("/api/config", get(config))
         .route("/api/providers", get(list_providers).post(add_provider))
         .route("/api/providers/{id}/discover", post(discover_models))
@@ -102,6 +109,19 @@ fn store(state: &AppState) -> Arc<SessionStore> {
 
 async fn index() -> Html<&'static str> {
     Html(INDEX)
+}
+
+async fn skills(State(state): State<AppState>) -> Json<Value> {
+    let store = state
+        .ctx
+        .service::<SkillStore>()
+        .expect("no skill store registered");
+    let skills: Vec<Value> = store
+        .list()
+        .into_iter()
+        .map(|(name, description)| json!({ "name": name, "description": description }))
+        .collect();
+    Json(json!({ "skills": skills }))
 }
 
 async fn tools(State(state): State<AppState>) -> Json<Value> {

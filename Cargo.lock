@@ -1140,6 +1140,7 @@ dependencies = [
  "rh-providers",
  "rh-session",
  "rh-tool",
+ "rh-tools",
  "serde",
  "serde_json",
  "tokio",

@@ -31,7 +31,9 @@
 - 🐚 **Shell / 文件**：`bash` / `fs_read` / `fs_write`（跨平台 shell，作用域限定在工作区）。
 - 🤖 **子代理任务**（Codex 式）：`task` / `task_output` / `task_wait` / `task_kill`，后台子代理并行执行。
 - 🔗 **MCP**：stdio MCP client + 内置市场，第三方工具一键桥接。
-- 🧭 **Trellis 工作模式**：可选的结构化开发工作流（头脑风暴→调研→计划→实现→审查→完成），带可见的阶段 stepper。
+- 🧭 **工作模式**：直接对话 / 计划模式 / Trellis 工作流 三选一，带可见的阶段 stepper。
+- 📝 **计划模式**：先规划后执行，规划阶段禁止写操作（bash/fs_write 门禁）。
+- 🧠 **Skills 系统**：内置 + 目录技能，`skill`/`skill_list` 工具按需加载。
 
 **工作区**
 
@@ -105,9 +107,17 @@ export RH_MODEL=deepseek-chat                   # 可选
 
 模型可调用 `task` 工具 spawn 子代理（独立 session），`run_in_background` 后台并行，`task_output`/`task_wait` 取结果，`task_kill` 取消。
 
-### Trellis 工作模式
+### 工作模式
 
-输入框旁的工作模式下拉可选「直接对话 / Trellis 工作流」。选 Trellis 后，agent 按结构化流程推进（头脑风暴 → 调研 → 计划 → 实现 → 审查 → 完成），每进入一个阶段调用 `workflow_step` 工具，页面顶部 stepper 实时高亮当前步骤。
+输入框旁的工作模式下拉三选一：
+
+- **直接对话**：普通 agent。
+- **计划模式**：先规划后执行，规划阶段禁止写操作（`bash`/`fs_write` 被门禁），产出计划后等用户切回执行。
+- **Trellis 工作流**：结构化流程（头脑风暴 → 调研 → 计划 → 实现 → 审查 → 完成），每进入一个阶段调用 `workflow_step` 工具，顶部 stepper 实时高亮。
+
+### Skills 系统
+
+内置 `code-review` / `write-tests` / `debugging` / `commit-message` 技能；`skill_list` 列出、`skill <name>` 加载。用户技能放在 `--skills-dir`（默认 `skills/`，每个 `.md` 一个技能），自动合并进侧栏「技能」列表。
 
 ---
 

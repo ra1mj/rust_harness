@@ -180,6 +180,8 @@
       <div class="side-label">任务 <button class="mini" id="taskAddBtn" style="display:none">＋</button></div>
       <div id="taskList"><div class="hint">暂无任务</div></div>
       <div class="add-task"><input id="taskInput" placeholder="添加任务…" /><button id="taskAdd">加</button></div>
+      <div class="side-label">技能</div>
+      <div id="skillsSide"></div>
       <div class="side-label">工具</div>
       <div id="toolsSide"></div>
     </div>
@@ -207,6 +209,7 @@
         <div class="row">
           <select class="model-select" id="modeSelect" title="工作模式">
             <option value="direct">直接对话</option>
+            <option value="plan">计划模式</option>
             <option value="trellis">Trellis 工作流</option>
           </select>
           <select class="model-select" id="modelSelect" title="选择模型"></select>
@@ -491,6 +494,14 @@
       const tools = await tRes.json();
       const side = document.getElementById('toolsSide'); side.textContent = '';
       (tools.tools || []).forEach(t => { const d = el('div', 'session-item'); d.appendChild(el('span', '', '•')); d.appendChild(el('span', '', t.name)); d.title = t.description; side.appendChild(d); });
+    } catch (err) {}
+    loadSkills();
+  }
+  async function loadSkills() {
+    try {
+      const data = await (await fetch('/api/skills')).json();
+      const side = document.getElementById('skillsSide'); side.textContent = '';
+      (data.skills || []).forEach(s => { const d = el('div', 'session-item'); d.appendChild(el('span', '', '✦')); d.appendChild(el('span', '', s.name)); d.title = s.description; side.appendChild(d); });
     } catch (err) {}
   }
 

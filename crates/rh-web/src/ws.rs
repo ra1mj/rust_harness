@@ -32,6 +32,10 @@ You are operating in the Trellis workflow mode. Follow these phases IN ORDER, an
 
 Persist every artifact to files under the workspace; never rely on memory alone.";
 
+/// System prompt for plan mode (plan first, no changes until approved).
+const PLAN_PROMPT: &str = "\
+You are in plan mode. Do NOT make any changes — no writing files and no running commands that modify anything. Research the request using read-only tools (fs_read, grep, glob, web_search, web_fetch), then present a concrete plan: the steps, the files you would change, and the acceptance criteria. Wait for the user to approve (switch out of plan mode) before implementing.";
+
 pub async fn upgrade(
     ws: WebSocketUpgrade,
     Query(params): Query<HashMap<String, String>>,
@@ -157,10 +161,10 @@ async fn run_turn(state: &AppState, session: Arc<Session>, input: &str) -> anyho
 
     // Inject workspace context (root, contents, git) into the system prompt.
     let workspace_summary = workspace_context(&session.workspace());
-    let system_prompt = if session.work_mode() == "trellis" {
-        format!("{TRELLIS_PROMPT}\n\n{workspace_summary}")
-    } else {
-        format!("You are a Rust harness agent. Use tools when useful.\n\n{workspace_summary}")
+    let system_prompt = match session.work_mode().as_str() {
+        "trellis" => format!("{TRELLIS_PROMPT}\n\n{workspace_summary}"),
+        "plan" => format!("{PLAN_PROMPT}\n\n{workspace_summary}"),
+        _ => format!("You are a Rust harness agent. Use tools when useful.\n\n{workspace_summary}"),
     };
 
     let definition = AgentDefinition {

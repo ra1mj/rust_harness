@@ -12,6 +12,7 @@ use rh_tool::{Tool, ToolCallContext, ToolDescription, ToolError, ToolId, ToolReg
 use crate::fs::FileSystem;
 use crate::search::{GlobTool, GrepTool};
 use crate::shell::Shell;
+use crate::skills::{SkillListTool, SkillStore, SkillTool};
 use crate::subagent::{SubagentManager, TaskKillTool, TaskOutputTool, TaskTool, TaskWaitTool};
 use crate::web::{WebFetchTool, WebSearchTool};
 use crate::workflow::WorkflowStepTool;
@@ -25,6 +26,15 @@ fn resolve_path(ctx: &ToolCallContext, p: &str) -> std::path::PathBuf {
     } else {
         ctx.cwd.join(path)
     }
+}
+
+/// Whether the session is in plan mode (write operations must be refused).
+fn is_plan_mode(ctx: &ToolCallContext) -> bool {
+    ctx.context
+        .service::<SessionStore>()
+        .and_then(|store| store.get(&ctx.session_id))
+        .map(|session| session.work_mode() == "plan")
+        .unwrap_or(false)
 }
 
 /// Runs a shell command via the [`Shell`] service.
@@ -51,6 +61,9 @@ impl Tool for BashTool {
     }
 
     async fn run(&self, ctx: &ToolCallContext, args: Value) -> Result<Value, ToolError> {
+        if is_plan_mode(ctx) {
+            return Err(ToolError::execution("plan 模式下禁止执行命令"));
+        }
         let command = args
             .get("command")
             .and_then(Value::as_str)
@@ -128,6 +141,9 @@ impl Tool for FsWriteTool {
     }
 
     async fn run(&self, ctx: &ToolCallContext, args: Value) -> Result<Value, ToolError> {
+        if is_plan_mode(ctx) {
+            return Err(ToolError::execution("plan 模式下禁止写文件"));
+        }
         let path_str = args
             .get("path")
             .and_then(Value::as_str)
@@ -198,6 +214,7 @@ impl Plugin for ToolsPlugin {
         disposers.push(ctx.provide_named("ToolRegistry", registry.clone()));
 
         disposers.push(ctx.provide_named("SubagentManager", SubagentManager::new()));
+        disposers.push(ctx.provide_named("SkillStore", SkillStore::new(None)));
 
         let tools: Vec<Arc<dyn Tool>> = vec![
             Arc::new(BashTool),
@@ -213,6 +230,8 @@ impl Plugin for ToolsPlugin {
             Arc::new(TaskWaitTool),
             Arc::new(TaskKillTool),
             Arc::new(WorkflowStepTool),
+            Arc::new(SkillTool),
+            Arc::new(SkillListTool),
         ];
         for tool in tools {
             disposers.push(registry.register(tool));
