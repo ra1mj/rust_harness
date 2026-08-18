@@ -83,6 +83,7 @@ pub async fn serve(
         .route("/api/sessions/{id}/tasks", get(list_tasks).post(add_task))
         .route("/api/sessions/{id}/tasks/{task_id}", patch(set_task_done))
         .route("/api/sessions/{id}/workspace", get(get_workspace).post(set_workspace))
+        .route("/api/sessions/{id}/mode", get(get_mode).post(set_mode))
         .route("/ws", get(ws::upgrade))
         .with_state(state);
 
@@ -377,6 +378,41 @@ async fn get_workspace(
     Ok(Json(json!({
         "root": root.display().to_string(),
         "context": workspace_context(&root),
+    })))
+}
+
+async fn get_mode(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> Result<Json<Value>, (StatusCode, String)> {
+    let session = store(&state)
+        .get(&id)
+        .ok_or_else(|| (StatusCode::NOT_FOUND, "session not found".to_string()))?;
+    Ok(Json(json!({
+        "mode": session.work_mode(),
+        "phase": session.workflow_phase(),
+    })))
+}
+
+async fn set_mode(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    Json(body): Json<Value>,
+) -> Result<Json<Value>, (StatusCode, String)> {
+    let mode = body
+        .get("mode")
+        .and_then(Value::as_str)
+        .ok_or_else(|| (StatusCode::BAD_REQUEST, "缺少 mode".to_string()))?;
+    let session = store(&state)
+        .get(&id)
+        .ok_or_else(|| (StatusCode::NOT_FOUND, "session not found".to_string()))?;
+    session.set_work_mode(mode);
+    store(&state)
+        .save(&session)
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    Ok(Json(json!({
+        "mode": session.work_mode(),
+        "phase": session.workflow_phase(),
     })))
 }
 

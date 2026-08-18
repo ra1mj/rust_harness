@@ -108,6 +108,11 @@ pub enum SessionEvent {
     TurnEnd {
         turn_id: TurnId,
     },
+    /// A workflow-mode progress marker (e.g. Trellis phase transitions).
+    WorkflowStep {
+        mode: String,
+        step: String,
+    },
 }
 
 /// A user- or agent-created task in the session's todo list.
@@ -139,6 +144,10 @@ pub struct SessionRecord {
     pub tasks: Vec<TaskItem>,
     #[serde(default)]
     pub workspace: Option<PathBuf>,
+    #[serde(default)]
+    pub work_mode: Option<String>,
+    #[serde(default)]
+    pub workflow_phase: Option<String>,
 }
 
 /// Default isolated workspace root for a session (per-session folder, so the
@@ -197,6 +206,8 @@ pub struct Session {
     tasks: Arc<RwLock<Vec<TaskItem>>>,
     created_at: u64,
     workspace: Arc<RwLock<PathBuf>>,
+    work_mode: Arc<RwLock<String>>,
+    workflow_phase: Arc<RwLock<Option<String>>>,
 }
 
 impl Session {
@@ -219,6 +230,8 @@ impl Session {
             tasks: Arc::new(RwLock::new(Vec::new())),
             created_at: now_millis(),
             workspace: Arc::new(RwLock::new(workspace)),
+            work_mode: Arc::new(RwLock::new("direct".to_string())),
+            workflow_phase: Arc::new(RwLock::new(None)),
         })
     }
 
@@ -237,6 +250,8 @@ impl Session {
             tasks: Arc::new(RwLock::new(record.tasks)),
             created_at: record.created_at,
             workspace: Arc::new(RwLock::new(workspace)),
+            work_mode: Arc::new(RwLock::new(record.work_mode.unwrap_or_else(|| "direct".to_string()))),
+            workflow_phase: Arc::new(RwLock::new(record.workflow_phase)),
         })
     }
 
@@ -297,6 +312,24 @@ impl Session {
         root
     }
 
+    /// The session's work mode ("direct" or "trellis").
+    pub fn work_mode(&self) -> String {
+        self.work_mode.read().expect("work_mode poisoned").clone()
+    }
+
+    pub fn set_work_mode(&self, mode: impl Into<String>) {
+        *self.work_mode.write().expect("work_mode poisoned") = mode.into();
+    }
+
+    /// The current workflow phase (Trellis mode), if any.
+    pub fn workflow_phase(&self) -> Option<String> {
+        self.workflow_phase.read().expect("workflow_phase poisoned").clone()
+    }
+
+    pub fn set_workflow_phase(&self, step: impl Into<String>) {
+        *self.workflow_phase.write().expect("workflow_phase poisoned") = Some(step.into());
+    }
+
     /// Subscribe to this session's live event stream (e.g. for a WebSocket).
     pub fn subscribe(&self) -> tokio::sync::broadcast::Receiver<SessionEvent> {
         self.live.subscribe()
@@ -344,6 +377,8 @@ impl Session {
             events: self.events(),
             tasks: self.tasks(),
             workspace: Some(self.workspace()),
+            work_mode: Some(self.work_mode()),
+            workflow_phase: self.workflow_phase(),
         }
     }
 
@@ -452,7 +487,8 @@ impl Session {
                 SessionEvent::TurnStart { .. }
                 | SessionEvent::StepStart { .. }
                 | SessionEvent::StepEnd { .. }
-                | SessionEvent::TurnEnd { .. } => {}
+                | SessionEvent::TurnEnd { .. }
+                | SessionEvent::WorkflowStep { .. } => {}
             }
         }
         out
@@ -471,6 +507,8 @@ impl Session {
             title: Arc::new(RwLock::new(self.title())),
             tasks: Arc::new(RwLock::new(self.tasks())),
             created_at: now_millis(),
+            work_mode: Arc::new(RwLock::new(self.work_mode())),
+            workflow_phase: Arc::new(RwLock::new(self.workflow_phase())),
         })
     }
 }

@@ -19,6 +19,7 @@ mod shell;
 mod subagent;
 mod tools;
 mod web;
+mod workflow;
 
 pub use fs::{FileSystem, FileSystemPlugin, LocalFileSystem};
 pub use search::{GlobTool, GrepTool};
@@ -26,3 +27,4 @@ pub use shell::{CommandOutput, LocalShell, Shell, ShellPlugin};
 pub use subagent::{SubagentManager, TaskKillTool, TaskOutputTool, TaskTool, TaskWaitTool};
 pub use tools::{BashTool, FsReadTool, FsWriteTool, TodoWriteTool, ToolsPlugin};
 pub use web::{WebFetchTool, WebSearchTool};
+pub use workflow::WorkflowStepTool;

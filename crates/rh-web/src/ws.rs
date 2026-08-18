@@ -19,6 +19,19 @@ use rh_session::{workspace_context, Session, SessionStore};
 
 use crate::AppState;
 
+/// System prompt for Trellis workflow mode.
+const TRELLIS_PROMPT: &str = "\
+You are operating in the Trellis workflow mode. Follow these phases IN ORDER, and call the `workflow_step` tool when you enter each phase so progress is visible:
+
+1. brainstorm (头脑风暴) — clarify requirements with the user one question at a time; write `prd.md` (requirements + acceptance criteria) to the workspace.
+2. research (调研) — research technical questions (web search/fetch); persist findings to `research/`.
+3. plan (计划) — write `design.md` (technical design) and `implement.md` (ordered checklist + validation + acceptance criteria).
+4. implement (实现) — use the `task` tool to spawn implementation subagents that read the artifacts.
+5. review (审查) — use the `task` tool to spawn a review subagent; fix its findings.
+6. done (完成) — summarize what was built and how it was verified.
+
+Persist every artifact to files under the workspace; never rely on memory alone.";
+
 pub async fn upgrade(
     ws: WebSocketUpgrade,
     Query(params): Query<HashMap<String, String>>,
@@ -144,9 +157,11 @@ async fn run_turn(state: &AppState, session: Arc<Session>, input: &str) -> anyho
 
     // Inject workspace context (root, contents, git) into the system prompt.
     let workspace_summary = workspace_context(&session.workspace());
-    let system_prompt = format!(
-        "You are a Rust harness agent. Use tools when useful.\n\n{workspace_summary}"
-    );
+    let system_prompt = if session.work_mode() == "trellis" {
+        format!("{TRELLIS_PROMPT}\n\n{workspace_summary}")
+    } else {
+        format!("You are a Rust harness agent. Use tools when useful.\n\n{workspace_summary}")
+    };
 
     let definition = AgentDefinition {
         name: "rh-web".to_string(),

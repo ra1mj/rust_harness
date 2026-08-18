@@ -122,6 +122,12 @@
   .send:disabled { opacity: 0.4; cursor: default; }
   .composer-hint { font-size: 11px; color: var(--ds-caption); margin-top: 8px; }
 
+  .trellis { display: flex; align-items: center; justify-content: center; gap: 6px; padding: 10px 16px; border-bottom: 1px solid var(--ds-border); background: var(--ds-sidebar); flex-wrap: wrap; }
+  .trellis .step { font-size: 12px; color: var(--ds-caption); padding: 4px 12px; border-radius: 999px; border: 1px solid var(--ds-border); }
+  .trellis .step.done { color: var(--ds-brand); border-color: var(--ds-brand); }
+  .trellis .step.active { color: #fff; background: var(--ds-brand); border-color: var(--ds-brand); font-weight: 600; }
+  .trellis .arrow { color: var(--ds-caption); font-size: 12px; }
+
   .overlay { position: fixed; inset: 0; background: rgba(15,17,21,.35); backdrop-filter: blur(2px); display: flex; align-items: center; justify-content: center; z-index: 30; }
   .overlay.hidden { display: none; }
   .modal { width: 640px; max-width: 94vw; max-height: 86vh; overflow-y: auto; background: var(--ds-bg); border: 1px solid var(--ds-border); border-radius: 16px; box-shadow: 0 24px 60px rgba(15,17,21,.18); padding: 20px 22px; }
@@ -193,11 +199,16 @@
       <h1>有什么可以帮你？</h1>
       <p>Rust Harness · 实时流式 · 工具调用 · 多模型</p>
     </div>
+    <div id="trellisBar" class="trellis hidden"></div>
     <div id="transcript"><div class="column" id="column"></div></div>
     <div class="composer">
       <div class="card">
         <textarea id="input" placeholder="给 Rust Harness 发送消息…" rows="1"></textarea>
         <div class="row">
+          <select class="model-select" id="modeSelect" title="工作模式">
+            <option value="direct">直接对话</option>
+            <option value="trellis">Trellis 工作流</option>
+          </select>
           <select class="model-select" id="modelSelect" title="选择模型"></select>
           <button class="send" id="send" title="发送" aria-label="发送">
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 13V3M8 3L4 7M8 3L12 7" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -257,6 +268,7 @@
 
   let ws, currentAssistant = null, working = false, hasMessages = false;
   let currentSessionId = null;
+  let currentMode = 'direct';
   let providersData = { providers: [], models: {}, active: {} };
 
   function el(tag, cls, text) { const n = document.createElement(tag); if (cls) n.className = cls; if (text !== undefined) n.textContent = text; return n; }
@@ -287,6 +299,7 @@
       case 'tool_call': { const row = el('div', 'msg-assistant'); row.appendChild(el('div', 'avatar', '⚙')); const body = el('div', 'body'); const chip = el('div', 'tool-call'); chip.appendChild(el('span', 'name', ev.tool_name)); chip.appendChild(document.createTextNode(' ' + JSON.stringify(ev.arguments || {}))); body.appendChild(chip); row.appendChild(body); addRow(row); currentAssistant = null; break; }
       case 'tool_result': { const row = el('div', 'msg-assistant'); row.appendChild(el('div', 'avatar', '⚙')); const body = el('div', 'body'); const res = el('div', 'tool-result' + (ev.is_error ? ' error' : '')); res.appendChild(el('span', ev.is_error ? 'err' : 'ok', ev.is_error ? '✗ ' : '✓ ')); let out; try { out = typeof ev.output === 'string' ? ev.output : JSON.stringify(ev.output); } catch (e) { out = String(ev.output); } if (out.length > 900) out = out.slice(0, 900) + '…'; res.appendChild(document.createTextNode(out)); body.appendChild(res); row.appendChild(body); addRow(row); break; }
       case 'turn_start': { addRow(el('div', 'turn-sep', '新回合')); break; }
+      case 'workflow_step': { if (ev.mode === 'trellis') { currentMode = 'trellis'; document.getElementById('modeSelect').value = 'trellis'; renderTrellis(ev.step); } break; }
       default: break;
     }
   }
@@ -349,13 +362,13 @@
       const rec = await (await fetch('/api/sessions/' + encodeURIComponent(id))).json();
       (rec.events || []).forEach(renderEvent);
     } catch (err) {}
-    loadSessions(); loadTasks(); loadWorkspace();
+    loadSessions(); loadTasks(); loadWorkspace(); loadMode();
     if (ws) ws.close(); else connect();
   }
   async function newSession() {
     let data; try { data = await (await fetch('/api/sessions', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) })).json(); } catch (err) { return; }
     const id = data.created; loadSessions();
-    currentSessionId = id; clearTranscript(); loadTasks(); loadWorkspace();
+    currentSessionId = id; clearTranscript(); loadTasks(); loadWorkspace(); loadMode();
     if (ws) ws.close(); else connect();
   }
   async function renameSessionPrompt(id, old) {
@@ -396,6 +409,46 @@
     await fetch('/api/sessions/' + encodeURIComponent(currentSessionId) + '/workspace', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ root }) });
     loadWorkspace();
   }
+
+  // ---------- trellis work mode ----------
+  const TRELLIS_STEPS = ['brainstorm', 'research', 'plan', 'implement', 'review', 'done'];
+  const TRELLIS_LABELS = { brainstorm: '头脑风暴', research: '调研', plan: '计划', implement: '实现', review: '审查', done: '完成' };
+  function buildTrellisBar() {
+    const bar = document.getElementById('trellisBar');
+    bar.textContent = '';
+    TRELLIS_STEPS.forEach((s, i) => {
+      if (i > 0) bar.appendChild(el('span', 'arrow', '→'));
+      const step = el('span', 'step', TRELLIS_LABELS[s]);
+      step.dataset.step = s;
+      bar.appendChild(step);
+    });
+  }
+  function renderTrellis(phase) {
+    const bar = document.getElementById('trellisBar');
+    bar.classList.toggle('hidden', currentMode !== 'trellis');
+    if (currentMode !== 'trellis') return;
+    const idx = TRELLIS_STEPS.indexOf(phase);
+    bar.querySelectorAll('.step').forEach(s => {
+      const si = TRELLIS_STEPS.indexOf(s.dataset.step);
+      s.classList.toggle('active', si === idx);
+      s.classList.toggle('done', idx >= 0 && si < idx);
+    });
+  }
+  async function loadMode() {
+    if (!currentSessionId) { currentMode = 'direct'; renderTrellis(null); return; }
+    try {
+      const data = await (await fetch('/api/sessions/' + encodeURIComponent(currentSessionId) + '/mode')).json();
+      currentMode = data.mode || 'direct';
+      document.getElementById('modeSelect').value = currentMode;
+      renderTrellis(data.phase);
+    } catch (e) {}
+  }
+  document.getElementById('modeSelect').addEventListener('change', async (e) => {
+    currentMode = e.target.value;
+    renderTrellis(null);
+    if (!currentSessionId) return;
+    await fetch('/api/sessions/' + encodeURIComponent(currentSessionId) + '/mode', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: currentMode }) });
+  });
 
   async function loadTasks() {
     if (!currentSessionId) { taskList.textContent = ''; taskList.appendChild(el('div', 'hint', '暂无任务')); return; }
@@ -599,7 +652,7 @@
       const rec = await (await fetch('/api/sessions/' + encodeURIComponent(currentSessionId))).json();
       (rec.events || []).forEach(renderEvent);
     } catch (err) {}
-    loadTasks(); loadWorkspace();
+    loadTasks(); loadWorkspace(); buildTrellisBar(); loadMode();
     connect();
   })();
 })();

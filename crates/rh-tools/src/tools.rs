@@ -14,6 +14,7 @@ use crate::search::{GlobTool, GrepTool};
 use crate::shell::Shell;
 use crate::subagent::{SubagentManager, TaskKillTool, TaskOutputTool, TaskTool, TaskWaitTool};
 use crate::web::{WebFetchTool, WebSearchTool};
+use crate::workflow::WorkflowStepTool;
 
 /// Resolve a path against the tool's working directory (the workspace root),
 /// so relative paths never escape to the process cwd.
@@ -211,6 +212,7 @@ impl Plugin for ToolsPlugin {
             Arc::new(TaskOutputTool),
             Arc::new(TaskWaitTool),
             Arc::new(TaskKillTool),
+            Arc::new(WorkflowStepTool),
         ];
         for tool in tools {
             disposers.push(registry.register(tool));
