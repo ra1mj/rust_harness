@@ -139,6 +139,12 @@
   .model-chip.active { border-color: var(--ds-brand); color: var(--ds-brand); background: #eef4ff; }
   .hint { font-size: 12px; color: var(--ds-caption); margin-top: 8px; }
   .presets { display: flex; flex-wrap: wrap; gap: 6px; }
+  .mkt { border: 1px solid var(--ds-border); border-radius: 10px; padding: 9px 12px; margin-bottom: 8px; }
+  .mkt .row { display: flex; align-items: center; gap: 8px; }
+  .mkt .info { flex: 1; min-width: 0; }
+  .mkt .name { font-weight: 600; font-size: 13px; }
+  .mkt .desc { font-size: 12px; color: var(--ds-text-secondary); }
+  .mkt .cmd { font-family: var(--ds-mono); font-size: 11px; color: var(--ds-caption); word-break: break-all; margin-top: 3px; }
   button.small { background: var(--ds-bg); color: var(--ds-text-secondary); border: 1px solid var(--ds-border); border-radius: 8px; padding: 5px 11px; cursor: pointer; font-size: 12px; }
   button.small:hover { border-color: var(--ds-brand); color: var(--ds-brand); }
   button.small.danger:hover { border-color: var(--ds-error); color: var(--ds-error); }
@@ -218,14 +224,10 @@
       <div style="margin-top:18px; border-top:1px solid var(--ds-border); padding-top:16px;">
         <h3 style="font-size:13px; margin:0 0 10px;">MCP 服务器</h3>
         <p class="desc">粘贴启动命令即可，工具会自动桥接进 harness。点下面预设可一键填入。</p>
-        <div class="presets" id="mcpPresets">
-          <button class="small" data-cmd="npx -y @modelcontextprotocol/server-filesystem /tmp">📁 filesystem</button>
-          <button class="small" data-cmd="npx -y @modelcontextprotocol/server-fetch">🌐 fetch</button>
-          <button class="small" data-cmd="npx -y @modelcontextprotocol/server-memory">🧠 memory</button>
-          <button class="small" data-cmd="npx -y @modelcontextprotocol/server-sequential-thinking">🤔 thinking</button>
-          <button class="small" data-cmd="uvx mcp-server-git">🪵 git</button>
-        </div>
-        <div id="mcpList" style="margin-top:10px;">加载中…</div>
+        <input id="mcpSearch" placeholder="🔍 搜索 MCP 服务器市场…" style="width:100%; box-sizing:border-box; background:var(--ds-sidebar); border:1px solid var(--ds-border); border-radius:8px; color:var(--ds-text); padding:8px 11px; font-size:13px; outline:none; margin-bottom:10px;" />
+        <div id="mcpMarket"></div>
+        <div class="side-label">已添加</div>
+        <div id="mcpList">加载中…</div>
         <form class="add" id="mcpForm" style="margin-top:12px; border-top:none; padding-top:0;">
           <label>启动命令（必填）<input name="command" placeholder="npx -y @modelcontextprotocol/server-filesystem /tmp" /></label>
           <label>名称（可选，留空自动推导）<input name="name" placeholder="例如：filesystem" /></label>
@@ -523,9 +525,51 @@
     e.target.reset(); loadMcp();
   });
   const mcpCmdInput = document.querySelector('#mcpForm input[name=command]');
-  document.querySelectorAll('#mcpPresets .small').forEach(btn => {
-    btn.onclick = () => { mcpCmdInput.value = btn.dataset.cmd; mcpCmdInput.focus(); };
-  });
+  const MCP_MARKET = [
+    { name: 'filesystem', desc: '本地文件系统：读写、列目录、搜索', cmd: 'npx -y @modelcontextprotocol/server-filesystem <路径>' },
+    { name: 'fetch', desc: '抓取网页为 markdown', cmd: 'npx -y @modelcontextprotocol/server-fetch' },
+    { name: 'memory', desc: '持久化知识图谱记忆', cmd: 'npx -y @modelcontextprotocol/server-memory' },
+    { name: 'thinking', desc: '顺序推理', cmd: 'npx -y @modelcontextprotocol/server-sequential-thinking' },
+    { name: 'git', desc: 'Git 仓库操作', cmd: 'uvx mcp-server-git' },
+    { name: 'sqlite', desc: 'SQLite 数据库查询', cmd: 'uvx mcp-server-sqlite --db-path <db路径>' },
+    { name: 'time', desc: '当前时间与时区转换', cmd: 'uvx mcp-server-time' },
+    { name: 'github', desc: 'GitHub 仓库/issue/PR（需 GITHUB_TOKEN）', cmd: 'npx -y @modelcontextprotocol/server-github' },
+    { name: 'everything', desc: '参考/测试服务器（echo 等）', cmd: 'npx -y @modelcontextprotocol/server-everything' },
+    { name: 'puppeteer', desc: '无头浏览器自动化', cmd: 'npx -y @modelcontextprotocol/server-puppeteer' },
+    { name: 'postgres', desc: 'PostgreSQL 查询', cmd: 'npx -y @modelcontextprotocol/server-postgres <连接串>' },
+    { name: 'brave-search', desc: 'Brave 搜索（需 BRAVE_API_KEY）', cmd: 'npx -y @modelcontextprotocol/server-brave-search' }
+  ];
+
+  function renderMarket(filter) {
+    const box = document.getElementById('mcpMarket');
+    box.textContent = '';
+    const q = (filter || '').toLowerCase();
+    const items = MCP_MARKET.filter(m => !q || (m.name + m.desc).toLowerCase().includes(q));
+    items.forEach(m => {
+      const card = el('div', 'mkt');
+      const row = el('div', 'row');
+      const info = el('div', 'info');
+      info.appendChild(el('div', 'name', m.name));
+      info.appendChild(el('div', 'desc', m.desc));
+      info.appendChild(el('div', 'cmd', m.cmd));
+      row.appendChild(info);
+      const add = el('button', 'small', '添加');
+      add.onclick = () => installMarket(m.cmd);
+      row.appendChild(add);
+      card.appendChild(row);
+      box.appendChild(card);
+    });
+    if (!items.length) box.appendChild(el('div', 'hint', '没有匹配的服务器'));
+  }
+
+  function installMarket(cmd) {
+    if (cmd.includes('<')) { mcpCmdInput.value = cmd; mcpCmdInput.focus(); return; }
+    const { command, args } = splitCommand(cmd);
+    fetch('/api/mcp', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: deriveName(command, args), command, args }) }).then(loadMcp);
+  }
+
+  document.getElementById('mcpSearch').addEventListener('input', (e) => renderMarket(e.target.value));
+  renderMarket('');
 
   // ---------- wiring ----------
   document.getElementById('newSession').onclick = newSession;
