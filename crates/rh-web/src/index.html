@@ -138,6 +138,7 @@
   .model-chip:hover { border-color: var(--ds-brand); color: var(--ds-brand); }
   .model-chip.active { border-color: var(--ds-brand); color: var(--ds-brand); background: #eef4ff; }
   .hint { font-size: 12px; color: var(--ds-caption); margin-top: 8px; }
+  .presets { display: flex; flex-wrap: wrap; gap: 6px; }
   button.small { background: var(--ds-bg); color: var(--ds-text-secondary); border: 1px solid var(--ds-border); border-radius: 8px; padding: 5px 11px; cursor: pointer; font-size: 12px; }
   button.small:hover { border-color: var(--ds-brand); color: var(--ds-brand); }
   button.small.danger:hover { border-color: var(--ds-error); color: var(--ds-error); }
@@ -216,13 +217,19 @@
 
       <div style="margin-top:18px; border-top:1px solid var(--ds-border); padding-top:16px;">
         <h3 style="font-size:13px; margin:0 0 10px;">MCP 服务器</h3>
-        <p class="desc">通过 stdio 启动 MCP 服务器，其工具会桥接进 harness。</p>
-        <div id="mcpList">加载中…</div>
+        <p class="desc">粘贴启动命令即可，工具会自动桥接进 harness。点下面预设可一键填入。</p>
+        <div class="presets" id="mcpPresets">
+          <button class="small" data-cmd="npx -y @modelcontextprotocol/server-filesystem /tmp">📁 filesystem</button>
+          <button class="small" data-cmd="npx -y @modelcontextprotocol/server-fetch">🌐 fetch</button>
+          <button class="small" data-cmd="npx -y @modelcontextprotocol/server-memory">🧠 memory</button>
+          <button class="small" data-cmd="npx -y @modelcontextprotocol/server-sequential-thinking">🤔 thinking</button>
+          <button class="small" data-cmd="uvx mcp-server-git">🪵 git</button>
+        </div>
+        <div id="mcpList" style="margin-top:10px;">加载中…</div>
         <form class="add" id="mcpForm" style="margin-top:12px; border-top:none; padding-top:0;">
-          <label>名称<input name="name" placeholder="例如：filesystem" /></label>
-          <label>命令<input name="command" placeholder="npx / python / uvx …" /></label>
-          <label>参数（空格分隔）<input name="args" placeholder="例如：-y @modelcontextprotocol/server-filesystem /tmp" /></label>
-          <button class="primary" type="submit">保存 MCP 服务器</button>
+          <label>启动命令（必填）<input name="command" placeholder="npx -y @modelcontextprotocol/server-filesystem /tmp" /></label>
+          <label>名称（可选，留空自动推导）<input name="name" placeholder="例如：filesystem" /></label>
+          <button class="primary" type="submit">添加</button>
         </form>
       </div>
       <div class="modal-foot"><button class="small" id="closeBtn">关闭</button></div>
@@ -496,12 +503,28 @@
     await fetch('/api/mcp/' + encodeURIComponent(name), { method: 'DELETE' });
     loadMcp();
   }
+  function splitCommand(cmd) {
+    const parts = (cmd || '').trim().split(/\s+/).filter(Boolean);
+    return { command: parts[0] || '', args: parts.slice(1) };
+  }
+  function deriveName(command, args) {
+    const pkg = args.find(a => /^@?[\w.-]+\/[\w.-]+$/.test(a) && !a.startsWith('/'));
+    if (pkg) return pkg.replace(/^@/, '').split('/').pop();
+    return command.split(/[/\\]/).pop() || 'mcp';
+  }
   document.getElementById('mcpForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const f = new FormData(e.target);
-    const args = (f.get('args') || '').trim().split(/\s+/).filter(Boolean);
-    await fetch('/api/mcp', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: f.get('name'), command: f.get('command'), args }) });
+    const { command, args } = splitCommand(f.get('command') || '');
+    if (!command) return;
+    let name = (f.get('name') || '').trim();
+    if (!name) name = deriveName(command, args);
+    await fetch('/api/mcp', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, command, args }) });
     e.target.reset(); loadMcp();
+  });
+  const mcpCmdInput = document.querySelector('#mcpForm input[name=command]');
+  document.querySelectorAll('#mcpPresets .small').forEach(btn => {
+    btn.onclick = () => { mcpCmdInput.value = btn.dataset.cmd; mcpCmdInput.focus(); };
   });
 
   // ---------- wiring ----------
