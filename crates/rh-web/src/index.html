@@ -192,10 +192,6 @@
       <div class="side-label">任务 <button class="mini" id="taskAddBtn" style="display:none">＋</button></div>
       <div id="taskList"><div class="hint">暂无任务</div></div>
       <div class="add-task"><input id="taskInput" placeholder="添加任务…" /><button id="taskAdd">加</button></div>
-      <div class="side-label">技能</div>
-      <div id="skillsSide"></div>
-      <div class="side-label">工具</div>
-      <div id="toolsSide"></div>
     </div>
     <div class="side-foot">
       <div style="display:flex;align-items:center;gap:9px;padding:6px 10px;color:var(--ds-caption);font-size:12px;"><span class="status-dot" id="dot"></span><span id="statusText">连接中…</span></div>
@@ -236,8 +232,8 @@
 
   <div class="overlay hidden" id="overlay">
     <div class="modal">
-      <h2>模型设置</h2>
-      <p class="desc">添加 OpenAI 兼容的 Provider，发现其模型并选择当前使用。</p>
+      <h2>设置</h2>
+      <p class="desc">模型、MCP 服务器、技能与工具。</p>
       <div id="providerList">加载中…</div>
       <form class="add" id="addForm">
         <h3>添加 Provider</h3>
@@ -259,6 +255,12 @@
           <label>名称（可选，留空自动推导）<input name="name" placeholder="例如：filesystem" /></label>
           <button class="primary" type="submit">添加</button>
         </form>
+      </div>
+      <div style="margin-top:18px; border-top:1px solid var(--ds-border); padding-top:14px;">
+        <div class="side-label">技能</div>
+        <div id="skillsSide" class="kv"></div>
+        <div class="side-label">工具</div>
+        <div id="toolsSide" class="kv"></div>
       </div>
       <div class="modal-foot"><button class="small" id="closeBtn">关闭</button></div>
     </div>
@@ -529,7 +531,7 @@
       const [tRes] = await Promise.all([fetch('/api/tools')]);
       const tools = await tRes.json();
       const side = document.getElementById('toolsSide'); side.textContent = '';
-      (tools.tools || []).forEach(t => { const d = el('div', 'session-item'); d.appendChild(el('span', '', '•')); d.appendChild(el('span', '', t.name)); d.title = t.description; side.appendChild(d); });
+      (tools.tools || []).forEach(t => { const c = el('span', '', t.name); c.title = t.description; side.appendChild(c); });
     } catch (err) {}
     loadSkills();
   }
@@ -537,7 +539,7 @@
     try {
       const data = await (await fetch('/api/skills')).json();
       const side = document.getElementById('skillsSide'); side.textContent = '';
-      (data.skills || []).forEach(s => { const d = el('div', 'session-item'); d.appendChild(el('span', '', '✦')); d.appendChild(el('span', '', s.name)); d.title = s.description; side.appendChild(d); });
+      (data.skills || []).forEach(s => { const c = el('span', '', s.name); c.title = s.description; side.appendChild(c); });
     } catch (err) {}
   }
 
@@ -674,7 +676,7 @@
   // ---------- wiring ----------
   document.getElementById('newSession').onclick = newSession;
   document.getElementById('wsChangeBtn').onclick = changeWorkspace;
-  document.getElementById('settingsBtn').onclick = () => { overlay.classList.remove('hidden'); loadProviders(); loadMcp(); };
+  document.getElementById('settingsBtn').onclick = () => { overlay.classList.remove('hidden'); loadProviders(); loadMcp(); loadMeta(); };
   document.getElementById('closeBtn').onclick = () => overlay.classList.add('hidden');
   overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.classList.add('hidden'); });
   document.getElementById('taskAdd').onclick = () => { addTask(taskInput.value.trim()); taskInput.value = ''; };
