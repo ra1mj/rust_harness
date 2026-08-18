@@ -114,6 +114,26 @@
 
   /* ---------- Main / chat ---------- */
   main { flex: 1; display: flex; flex-direction: column; min-width: 0; background: var(--bg); position: relative; }
+
+  /* Top-right subagent panel (Codex-style) */
+  .subagents { position: absolute; top: 14px; right: 18px; z-index: 20; display: flex; flex-direction: column; gap: 8px; max-width: 320px; pointer-events: none; }
+  .subagent { pointer-events: auto; background: var(--surface); border: 1px solid var(--border); border-radius: 13px; box-shadow: var(--shadow-lg); padding: 10px 13px; font-size: 12.5px; animation: subagent-in .2s var(--ease); }
+  @keyframes subagent-in { from { opacity: 0; transform: translateY(-6px) scale(0.98); } to { opacity: 1; transform: none; } }
+  .subagent .top { display: flex; align-items: center; gap: 8px; }
+  .subagent .icon { flex: none; }
+  .subagent .name { flex: 1; min-width: 0; font-weight: 600; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .subagent .status { font-size: 10px; font-weight: 500; border-radius: 999px; padding: 1px 8px; flex: none; }
+  .subagent .status.running { color: var(--accent); background: rgba(0, 113, 227, 0.1); }
+  .subagent .status.ok { color: var(--success); background: rgba(52, 199, 89, 0.12); }
+  .subagent .status.err { color: var(--error); background: rgba(255, 59, 48, 0.1); }
+  .subagent .activity { margin-top: 4px; color: var(--caption); font-size: 11.5px; }
+  .subagent.running { position: relative; overflow: hidden; }
+  .subagent.running::before {
+    content: ''; position: absolute; inset: 0; pointer-events: none;
+    background: linear-gradient(100deg, transparent 20%, rgba(0, 113, 227, 0.14) 45%, rgba(120, 180, 255, 0.22) 50%, rgba(0, 113, 227, 0.14) 55%, transparent 80%);
+    background-size: 250% 100%;
+    animation: shimmer 1.6s linear infinite;
+  }
   .hero { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 24px; pointer-events: none; transition: opacity .25s var(--ease); }
   .hero.hidden { opacity: 0; }
   .hero .glow { width: 140px; height: 140px; border-radius: 50%; background: radial-gradient(circle, rgba(0, 113, 227, 0.14), rgba(0, 113, 227, 0) 70%); display: grid; place-items: center; }
@@ -354,6 +374,7 @@
   </aside>
 
   <main>
+    <div class="subagents" id="subagents"></div>
     <div class="hero" id="hero">
       <div class="glow"><div class="mark">🐋</div></div>
       <h1>有什么可以帮你？</h1>
@@ -585,9 +606,44 @@
         const body = el('div', 'body'); const res = el('div', 'tool-result error', '错误：' + data.error);
         body.appendChild(res); row.appendChild(body); addRow(row); setWorking(false); return;
       }
+      if (data.type === 'subagent') { handleSubagent(data.update); return; }
       if (data.type === 'turn_end') { setWorking(false); loadTasks(); }
       renderEvent(data);
     };
+  }
+
+  // ---------- subagents (Codex-style panel) ----------
+  const subagentCards = {};
+  function handleSubagent(update) {
+    const box = document.getElementById('subagents');
+    let card = subagentCards[update.task_id];
+    if (!card) {
+      const c = el('div', 'subagent');
+      const top = el('div', 'top');
+      top.appendChild(el('span', 'icon', '🤖'));
+      top.appendChild(el('span', 'name', update.description || '子代理'));
+      const status = el('span', 'status running', '运行中');
+      top.appendChild(status);
+      c.appendChild(top);
+      const activity = el('div', 'activity', '启动中');
+      c.appendChild(activity);
+      box.appendChild(c);
+      card = { el: c, status, activity };
+      subagentCards[update.task_id] = card;
+    }
+    if (update.status === 'running') {
+      card.el.classList.add('running');
+      card.status.textContent = '运行中';
+      card.status.className = 'status running';
+      card.activity.textContent = update.activity || '工作中';
+    } else {
+      card.el.classList.remove('running');
+      const ok = update.status === 'completed';
+      card.status.textContent = ok ? '✓' : (update.status === 'cancelled' ? '取消' : '✗');
+      card.status.className = 'status ' + (ok ? 'ok' : 'err');
+      card.activity.textContent = update.activity || update.status;
+      setTimeout(() => { card.el.remove(); delete subagentCards[update.task_id]; }, 5000);
+    }
   }
 
   // ---------- sessions ----------

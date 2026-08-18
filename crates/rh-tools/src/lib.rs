@@ -26,7 +26,9 @@ pub use fs::{FileSystem, FileSystemPlugin, LocalFileSystem};
 pub use search::{GlobTool, GrepTool};
 pub use shell::{CommandOutput, LocalShell, Shell, ShellPlugin};
 pub use skills::{SkillListTool, SkillStore, SkillTool};
-pub use subagent::{SubagentManager, TaskKillTool, TaskOutputTool, TaskTool, TaskWaitTool};
+pub use subagent::{
+    SubagentManager, SubagentUpdate, TaskKillTool, TaskOutputTool, TaskTool, TaskWaitTool,
+};
 pub use tools::{BashTool, FsReadTool, FsWriteTool, TodoWriteTool, ToolsPlugin};
 pub use web::{WebFetchTool, WebSearchTool};
 pub use workflow::WorkflowStepTool;

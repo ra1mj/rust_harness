@@ -8,9 +8,10 @@
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, RwLock};
 
 use async_trait::async_trait;
+use serde::Serialize;
 use serde_json::{json, Value};
 use tokio::sync::oneshot;
 
@@ -19,9 +20,22 @@ use rh_core::Context;
 use rh_session::{ContentBlock, Session, SessionEvent, SessionStore};
 use rh_tool::{Tool, ToolCallContext, ToolDescription, ToolError, ToolId};
 
+/// A live status update emitted on the context so the parent UI can observe
+/// subagent progress (Codex-style task panel).
+#[derive(Debug, Clone, Serialize)]
+pub struct SubagentUpdate {
+    pub task_id: String,
+    pub description: String,
+    pub status: String,   // running | completed | failed | cancelled
+    pub activity: String, // latest activity label
+}
+
 struct SubagentHandle {
     output: Arc<Mutex<Option<Result<String, String>>>>,
     cancel: Option<oneshot::Sender<()>>,
+    status: Arc<RwLock<String>>,
+    activity: Arc<RwLock<String>>,
+    description: String,
 }
 
 /// Tracks in-flight subagents (background and foreground).
@@ -39,12 +53,17 @@ impl SubagentManager {
     }
 
     /// Spawn a subagent on its own session; returns the task id.
-    fn spawn(&self, ctx: Context, prompt: String, session: Arc<Session>) -> String {
+    fn spawn(&self, ctx: Context, prompt: String, description: String, session: Arc<Session>) -> String {
         let task_id = format!("task-{}", self.next_id.fetch_add(1, Ordering::Relaxed));
         let (cancel_tx, cancel_rx) = oneshot::channel();
+        let status = Arc::new(RwLock::new("running".to_string()));
+        let activity = Arc::new(RwLock::new(String::new()));
         let handle = SubagentHandle {
             output: Arc::new(Mutex::new(None)),
             cancel: Some(cancel_tx),
+            status: status.clone(),
+            activity: activity.clone(),
+            description: description.clone(),
         };
         self.tasks
             .lock()
@@ -59,15 +78,66 @@ impl SubagentManager {
             .output
             .clone();
 
+        // Forward the subagent's own activity to the parent context.
+        let mut live = session.subscribe();
+        let fwd_ctx = ctx.clone();
+        let fwd_id = task_id.clone();
+        let fwd_desc = description.clone();
+        let fwd_activity = activity.clone();
+        let return_id = task_id.clone();
+        let fwd = tokio::spawn(async move {
+            while let Ok(ev) = live.recv().await {
+                let act = activity_of(&ev);
+                if !act.is_empty() {
+                    *fwd_activity.write().expect("activity poisoned") = act.clone();
+                    fwd_ctx.emit(&SubagentUpdate {
+                        task_id: fwd_id.clone(),
+                        description: fwd_desc.clone(),
+                        status: "running".to_string(),
+                        activity: act,
+                    });
+                }
+            }
+        });
+
         tokio::spawn(async move {
             let result = tokio::select! {
                 r = run_subagent(&ctx, session, &prompt) => r.map_err(|e| e.to_string()),
                 _ = cancel_rx => Err("cancelled".to_string()),
             };
+            fwd.abort();
+            let st = match &result {
+                Ok(_) => "completed",
+                Err(e) if e == "cancelled" => "cancelled",
+                Err(_) => "failed",
+            }
+            .to_string();
+            *status.write().expect("status poisoned") = st.clone();
             *output.lock().expect("output poisoned") = Some(result);
+            ctx.emit(&SubagentUpdate {
+                task_id,
+                description,
+                status: st,
+                activity: "完成".to_string(),
+            });
         });
 
-        task_id
+        return_id
+    }
+
+    /// Snapshot of all subagents (for the initial UI render).
+    pub fn snapshot(&self) -> Vec<SubagentUpdate> {
+        self.tasks
+            .lock()
+            .expect("subagent map poisoned")
+            .iter()
+            .map(|(id, h)| SubagentUpdate {
+                task_id: id.clone(),
+                description: h.description.clone(),
+                status: h.status.read().expect("status poisoned").clone(),
+                activity: h.activity.read().expect("activity poisoned").clone(),
+            })
+            .collect()
     }
 
     fn output(&self, task_id: &str) -> Option<Option<Result<String, String>>> {
@@ -87,6 +157,19 @@ impl SubagentManager {
         } else {
             false
         }
+    }
+}
+
+/// Human label for a subagent's current activity.
+fn activity_of(ev: &SessionEvent) -> String {
+    match ev {
+        SessionEvent::ToolCall { tool_name, .. } => format!("调用 {tool_name}"),
+        SessionEvent::ReasoningChunk { .. } => "思考中".to_string(),
+        SessionEvent::AssistantChunk { .. } => "生成回复".to_string(),
+        SessionEvent::ToolResult { is_error, .. } => {
+            if *is_error { "工具失败".to_string() } else { "工具完成".to_string() }
+        }
+        _ => String::new(),
     }
 }
 
@@ -162,7 +245,7 @@ impl Tool for TaskTool {
         };
         let sub_session = store.create(format!("子任务: {label}"));
 
-        let task_id = manager.spawn(ctx.context.clone(), prompt.to_string(), sub_session);
+        let task_id = manager.spawn(ctx.context.clone(), prompt.to_string(), description.to_string(), sub_session);
 
         if run_in_background {
             Ok(json!({ "task_id": task_id, "status": "running" }))

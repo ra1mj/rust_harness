@@ -16,6 +16,7 @@ use tokio::sync::mpsc;
 
 use rh_agent::{AgentBuilder, AgentDefinition};
 use rh_session::{workspace_context, Session, SessionStore};
+use rh_tools::{SubagentManager, SubagentUpdate};
 
 use crate::AppState;
 
@@ -76,6 +77,22 @@ async fn handle(socket: WebSocket, state: AppState, session_id: Option<String>) 
         .await;
 
     let mut live = session.subscribe();
+
+    // Forward subagent status updates to the client (Codex-style task panel).
+    let (subagent_tx, mut subagent_rx) = mpsc::unbounded_channel::<SubagentUpdate>();
+    let _subagent_subscription = state.ctx.on::<SubagentUpdate>(Arc::new(move |u: &SubagentUpdate| {
+        let _ = subagent_tx.send(u.clone());
+    }));
+    if let Some(manager) = state.ctx.service::<SubagentManager>() {
+        for update in manager.snapshot() {
+            let _ = sender
+                .send(Message::Text(
+                    json!({ "type": "subagent", "update": update }).to_string().into(),
+                ))
+                .await;
+        }
+    }
+
     let (done_tx, mut done_rx) = mpsc::unbounded_channel::<Result<(), String>>();
     let mut running = false;
 
@@ -104,6 +121,14 @@ async fn handle(socket: WebSocket, state: AppState, session_id: Option<String>) 
                         }
                     }
                     None => {}
+                }
+            }
+            subagent = subagent_rx.recv() => {
+                if let Some(update) = subagent {
+                    let frame = json!({ "type": "subagent", "update": update }).to_string();
+                    if sender.send(Message::Text(frame.into())).await.is_err() {
+                        break;
+                    }
                 }
             }
             message = receiver.next() => {
