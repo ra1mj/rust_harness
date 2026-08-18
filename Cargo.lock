@@ -1061,6 +1061,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "rh-mcp"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "rh-tool",
+ "serde",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
 name = "rh-providers"
 version = "0.1.0"
 dependencies = [
@@ -1124,6 +1136,7 @@ dependencies = [
  "futures",
  "rh-agent",
  "rh-core",
+ "rh-mcp",
  "rh-providers",
  "rh-session",
  "rh-tool",

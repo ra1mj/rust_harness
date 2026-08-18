@@ -4,6 +4,7 @@
 //! [`SessionEvent`]s, and REST endpoints for workspace management: sessions
 //! (create/switch/rename/delete/export), tasks, and model providers.
 
+mod mcp;
 mod ws;
 
 use std::collections::HashMap;
@@ -21,9 +22,12 @@ use axum::{Json, Router};
 use serde_json::{json, Value};
 
 use rh_core::Context;
+use rh_mcp::McpServerConfig;
 use rh_providers::{ModelHub, ProviderConfig};
 use rh_session::{workspace_context, SessionStore, TaskItem};
 use rh_tool::{ToolCallContext, ToolRegistry};
+
+use mcp::McpHub;
 
 const INDEX: &str = include_str!("index.html");
 
@@ -33,6 +37,7 @@ struct AppState {
     ctx: Context,
     plugins: Vec<String>,
     hub: Arc<ModelHub>,
+    mcp: Arc<McpHub>,
 }
 
 /// Serve the web UI until the process is stopped.
@@ -42,16 +47,21 @@ pub async fn serve(
     addr: SocketAddr,
     models_file: PathBuf,
     data_dir: PathBuf,
+    mcp_file: PathBuf,
 ) -> anyhow::Result<()> {
     // Replace the in-memory session store with a persistent one (one JSON
     // file per session under `data_dir`). Held for the server lifetime.
     let store = Arc::new(SessionStore::persistent(data_dir, Some(ctx.clone())));
     let _store_registration = ctx.provide_named("SessionStore", store);
 
+    let mcp = McpHub::load(mcp_file);
+    mcp.connect_all(&ctx).await;
+
     let state = AppState {
         ctx,
         plugins,
         hub: Arc::new(ModelHub::load(models_file)),
+        mcp,
     };
 
     let app = Router::new()
@@ -62,6 +72,8 @@ pub async fn serve(
         .route("/api/providers/{id}/discover", post(discover_models))
         .route("/api/providers/{id}", delete(remove_provider))
         .route("/api/active", post(set_active))
+        .route("/api/mcp", get(list_mcp).post(add_mcp))
+        .route("/api/mcp/{name}", delete(remove_mcp))
         .route("/api/sessions", get(list_sessions).post(create_session))
         .route(
             "/api/sessions/{id}",
@@ -203,6 +215,36 @@ async fn set_active(
         .set_active(provider, model)
         .map(|_| Json(hub_state(&state.hub)))
         .map_err(|err| (StatusCode::BAD_REQUEST, err.to_string()))
+}
+
+// ---------- MCP servers ----------
+
+async fn list_mcp(State(state): State<AppState>) -> Json<Value> {
+    Json(json!({ "servers": state.mcp.list() }))
+}
+
+async fn add_mcp(
+    State(state): State<AppState>,
+    Json(config): Json<McpServerConfig>,
+) -> Result<Json<Value>, (StatusCode, String)> {
+    state
+        .mcp
+        .add(&state.ctx, config)
+        .await
+        .map(|_| Json(json!({ "servers": state.mcp.list() })))
+        .map_err(|err| (StatusCode::BAD_REQUEST, err.to_string()))
+}
+
+async fn remove_mcp(
+    State(state): State<AppState>,
+    Path(name): Path<String>,
+) -> Result<Json<Value>, (StatusCode, String)> {
+    state
+        .mcp
+        .remove(&name)
+        .await
+        .map(|_| Json(json!({ "servers": state.mcp.list() })))
+        .map_err(|err| (StatusCode::NOT_FOUND, err.to_string()))
 }
 
 // ---------- sessions ----------

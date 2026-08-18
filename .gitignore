@@ -2,4 +2,5 @@
 .ref/
 .env
 rh-models.json
+rh-mcp.json
 .rh/

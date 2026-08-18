@@ -213,6 +213,18 @@
         <label>API Key<input name="api_key" type="password" placeholder="sk-…" /></label>
         <button class="primary" type="submit">保存 Provider</button>
       </form>
+
+      <div style="margin-top:18px; border-top:1px solid var(--ds-border); padding-top:16px;">
+        <h3 style="font-size:13px; margin:0 0 10px;">MCP 服务器</h3>
+        <p class="desc">通过 stdio 启动 MCP 服务器，其工具会桥接进 harness。</p>
+        <div id="mcpList">加载中…</div>
+        <form class="add" id="mcpForm" style="margin-top:12px; border-top:none; padding-top:0;">
+          <label>名称<input name="name" placeholder="例如：filesystem" /></label>
+          <label>命令<input name="command" placeholder="npx / python / uvx …" /></label>
+          <label>参数（空格分隔）<input name="args" placeholder="例如：-y @modelcontextprotocol/server-filesystem /tmp" /></label>
+          <button class="primary" type="submit">保存 MCP 服务器</button>
+        </form>
+      </div>
       <div class="modal-foot"><button class="small" id="closeBtn">关闭</button></div>
     </div>
   </div>
@@ -460,10 +472,42 @@
   modelSelect.addEventListener('change', () => { const v = modelSelect.value; if (!v) return; const [provider, model] = v.split('||'); selectModel(provider, model); });
   addForm.addEventListener('submit', async (e) => { e.preventDefault(); const f = new FormData(addForm); await fetch('/api/providers', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: '', name: f.get('name'), base_url: f.get('base_url'), api_key: f.get('api_key') }) }); addForm.reset(); loadProviders(); });
 
+  // ---------- MCP ----------
+  async function loadMcp() {
+    let data; try { data = await (await fetch('/api/mcp')).json(); } catch (err) { return; }
+    renderMcp(data.servers || []);
+  }
+  function renderMcp(servers) {
+    const box = document.getElementById('mcpList'); box.textContent = '';
+    if (!servers.length) { box.appendChild(el('div', 'hint', '暂无 MCP 服务器')); return; }
+    servers.forEach(s => {
+      const row = el('div', 'provider');
+      const head = el('div', 'head');
+      const info = el('div', 'info');
+      info.appendChild(el('div', 'name', s.name));
+      info.appendChild(el('div', 'url', s.command + ' ' + (s.args || []).join(' ')));
+      head.appendChild(info);
+      const del = el('button', 'small danger', '删除'); del.onclick = () => removeMcp(s.name); head.appendChild(del);
+      row.appendChild(head); box.appendChild(row);
+    });
+  }
+  async function removeMcp(name) {
+    if (!confirm('删除 MCP 服务器 ' + name + '？')) return;
+    await fetch('/api/mcp/' + encodeURIComponent(name), { method: 'DELETE' });
+    loadMcp();
+  }
+  document.getElementById('mcpForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const f = new FormData(e.target);
+    const args = (f.get('args') || '').trim().split(/\s+/).filter(Boolean);
+    await fetch('/api/mcp', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: f.get('name'), command: f.get('command'), args }) });
+    e.target.reset(); loadMcp();
+  });
+
   // ---------- wiring ----------
   document.getElementById('newSession').onclick = newSession;
   document.getElementById('wsChangeBtn').onclick = changeWorkspace;
-  document.getElementById('settingsBtn').onclick = () => { overlay.classList.remove('hidden'); loadProviders(); };
+  document.getElementById('settingsBtn').onclick = () => { overlay.classList.remove('hidden'); loadProviders(); loadMcp(); };
   document.getElementById('closeBtn').onclick = () => overlay.classList.add('hidden');
   overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.classList.add('hidden'); });
   document.getElementById('taskAdd').onclick = () => { addTask(taskInput.value.trim()); taskInput.value = ''; };

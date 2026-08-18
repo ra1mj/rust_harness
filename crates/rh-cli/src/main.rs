@@ -43,6 +43,9 @@ enum Command {
         /// Directory sessions are persisted to.
         #[arg(long, default_value = ".rh")]
         data_dir: String,
+        /// File MCP server configs are persisted to.
+        #[arg(long, default_value = "rh-mcp.json")]
+        mcp_file: String,
     },
 }
 
@@ -57,6 +60,7 @@ async fn main() -> anyhow::Result<()> {
             addr,
             models_file,
             data_dir,
+            mcp_file,
         } => {
             let assembled = assemble()?;
             let plugins = assembled.plugins.iter().map(|s| s.to_string()).collect();
@@ -66,6 +70,7 @@ async fn main() -> anyhow::Result<()> {
                 addr.parse()?,
                 models_file.into(),
                 data_dir.into(),
+                mcp_file.into(),
             )
             .await
         }

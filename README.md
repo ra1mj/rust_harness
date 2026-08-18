@@ -65,6 +65,16 @@ Web 左侧栏支持完整的工作区管理：
 
 `bash`、`fs_read`、`fs_write`、`todo_write`、`web_fetch`、`web_search`、`grep`、`glob`、`task`、`task_output`、`task_wait`、`task_kill`。
 
+### MCP 支持
+
+在「设置 → MCP 服务器」添加任意 stdio MCP 服务器（命令 + 参数），其工具会自动桥接进 harness 的 `Tool` 注册表，模型可直接调用。配置持久化到 `--mcp-file`（默认 `rh-mcp.json`）。
+
+```sh
+cargo run -- web --mcp-file ~/.rh/mcp.json
+```
+
+示例：添加 `npx -y @modelcontextprotocol/server-filesystem /你的/目录` 即获得文件系统 MCP 工具。
+
 ## 仓库结构
 
 ```
