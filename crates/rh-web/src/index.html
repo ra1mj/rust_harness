@@ -170,6 +170,16 @@
   .avatar { width: 30px; height: 30px; flex: none; border-radius: 9px; display: grid; place-items: center; font-size: 15px; background: linear-gradient(145deg, #d97b55, #c96442); color: #faf9f5; box-shadow: 0 2px 6px rgba(201, 100, 66, 0.24); }
   .msg-assistant .body { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 11px; }
   .msg-assistant .text { font-size: 15.5px; line-height: 1.62; white-space: pre-wrap; word-break: break-word; color: var(--text); }
+  .msg-assistant .text a, .msg-user .bubble a { color: var(--accent-hover); text-decoration: underline; text-underline-offset: 2px; word-break: break-all; }
+  .msg-assistant .text a:hover, .msg-user .bubble a:hover { color: var(--accent); }
+  code.inline { font-family: var(--mono); font-size: 13px; background: rgba(20, 20, 19, 0.06); border-radius: 5px; padding: 1px 6px; color: var(--accent-hover); cursor: pointer; }
+  code.inline:hover { background: var(--accent-soft); }
+  .codeblock { border: 1px solid var(--border); border-radius: 12px; overflow: hidden; margin: 10px 0; background: var(--surface); }
+  .codeblock-head { display: flex; align-items: center; justify-content: space-between; padding: 6px 12px; border-bottom: 1px solid var(--border); font-size: 11px; color: var(--caption); font-family: var(--mono); }
+  .codeblock-head .copy-btn { border: none; background: var(--accent-soft); color: var(--accent-hover); border-radius: 7px; padding: 3px 10px; font-size: 11px; cursor: pointer; transition: all .12s var(--ease); }
+  .codeblock-head .copy-btn:hover { background: var(--accent); color: #faf9f5; }
+  .codeblock pre { margin: 0; padding: 12px 14px; overflow-x: auto; }
+  .codeblock code { font-family: var(--mono); font-size: 12.5px; line-height: 1.6; color: var(--text); white-space: pre; }
   .tool-call { align-self: flex-start; display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--border); background: var(--surface); border-radius: 11px; padding: 7px 13px; font-size: 12.5px; color: var(--text-2); box-shadow: var(--shadow-sm); }
   .tool-call .name { font-family: var(--mono); color: var(--accent-hover); font-weight: 600; }
   .tool-result { border-left: 2px solid var(--border); padding: 2px 0 2px 13px; font-family: var(--mono); font-size: 12.5px; line-height: 1.55; color: var(--text-2); white-space: pre-wrap; word-break: break-word; }
@@ -529,8 +539,45 @@
   function setHero(show) { hero.classList.toggle('hidden', !show); }
   function scrollBottom() { transcript.scrollTop = transcript.scrollHeight; }
   function textFromContent(c) { return Array.isArray(c) ? c.filter(b => b.kind === 'text').map(b => b.text).join('\n') : ''; }
+  function escapeHtml(s) { return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+  function renderInline(text) {
+    let s = escapeHtml(text);
+    s = s.replace(/(https?:\/\/[^\s<>"']+)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>');
+    s = s.replace(/`([^`\n]+)`/g, '<code class="inline">$1</code>');
+    s = s.replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>');
+    s = s.replace(/\n/g, '<br>');
+    return s;
+  }
+  function renderMarkdown(text) {
+    const parts = String(text).split('```');
+    let html = '';
+    for (let i = 0; i < parts.length; i++) {
+      if (i % 2 === 1) {
+        let code = parts[i];
+        let lang = '';
+        const nl = code.indexOf('\n');
+        if (nl !== -1) { lang = code.slice(0, nl).trim(); code = code.slice(nl + 1); }
+        const id = 'cb-' + Math.random().toString(36).slice(2, 9);
+        html += '<div class="codeblock"><div class="codeblock-head"><span>' + escapeHtml(lang || 'code') + '</span><button class="copy-btn" data-id="' + id + '">复制</button></div><pre><code id="' + id + '">' + escapeHtml(code) + '</code></pre></div>';
+      } else {
+        html += renderInline(parts[i]);
+      }
+    }
+    return html;
+  }
   function showMessage() { if (!hasMessages) { hasMessages = true; setHero(false); } }
   function addRow(node) { column.appendChild(node); scrollBottom(); showMessage(); }
+
+  document.addEventListener('click', (e) => {
+    const copy = e.target.closest('.copy-btn');
+    if (copy) {
+      const code = document.getElementById(copy.dataset.id);
+      if (code) navigator.clipboard.writeText(code.textContent).then(() => { copy.textContent = '已复制'; setTimeout(() => copy.textContent = '复制', 1500); });
+      return;
+    }
+    const inline = e.target.closest('code.inline');
+    if (inline) navigator.clipboard.writeText(inline.textContent).then(() => {}); 
+  });
 
   function ensureAssistant() {
     if (currentAssistant) return currentAssistant;
@@ -540,7 +587,7 @@
     const body = el('div', 'body');
     const text = el('div', 'text', '');
     body.appendChild(text); row.appendChild(body); addRow(row);
-    currentAssistant = { text, avatar };
+    currentAssistant = { el: text, avatar, buffer: '' };
     return currentAssistant;
   }
 
@@ -584,10 +631,10 @@
 
   function renderEvent(ev) {
     switch (ev.type) {
-      case 'user_message': { const row = el('div', 'msg-user'); row.appendChild(el('div', 'bubble', textFromContent(ev.content))); addRow(row); currentAssistant = null; currentTool = null; break; }
-      case 'assistant_chunk': { ensureAssistant().text.textContent += ev.text; scrollBottom(); break; }
+      case 'user_message': { const row = el('div', 'msg-user'); const bubble = el('div', 'bubble'); bubble.innerHTML = renderMarkdown(textFromContent(ev.content)); row.appendChild(bubble); addRow(row); currentAssistant = null; currentTool = null; break; }
+      case 'assistant_chunk': { const a = ensureAssistant(); a.buffer += ev.text; a.el.innerHTML = renderMarkdown(a.buffer); scrollBottom(); break; }
       case 'reasoning_chunk': { if (!currentReasoning) currentReasoning = addActivity('💭', '思考'); currentReasoning.body.appendChild(document.createTextNode(ev.text)); break; }
-      case 'assistant_message': { const text = textFromContent(ev.content); if (currentAssistant) { if (currentAssistant.avatar) currentAssistant.avatar.classList.remove('working'); if (text && !currentAssistant.text.textContent) currentAssistant.text.textContent = text; currentAssistant = null; } else if (text) { const a = ensureAssistant(); a.avatar.classList.remove('working'); a.text.textContent = text; currentAssistant = null; } if (currentReasoning) { currentReasoning.finish(true, '完成'); currentReasoning = null; } currentTool = null; break; }
+      case 'assistant_message': { const text = textFromContent(ev.content); if (currentAssistant) { if (currentAssistant.avatar) currentAssistant.avatar.classList.remove('working'); if (text && !currentAssistant.buffer) { currentAssistant.buffer = text; currentAssistant.el.innerHTML = renderMarkdown(text); } currentAssistant = null; } else if (text) { const a = ensureAssistant(); a.avatar.classList.remove('working'); a.buffer = text; a.el.innerHTML = renderMarkdown(text); currentAssistant = null; } if (currentReasoning) { currentReasoning.finish(true, '完成'); currentReasoning = null; } currentTool = null; break; }
       case 'tool_call': { currentTool = addActivity('⚙', ev.tool_name); currentTool.body.appendChild(el('div', 'sec', '参数')); currentTool.body.appendChild(document.createTextNode(JSON.stringify(ev.arguments || {}))); currentAssistant = null; break; }
       case 'tool_result': { if (currentTool) { let out; try { out = typeof ev.output === 'string' ? ev.output : JSON.stringify(ev.output); } catch (e) { out = String(ev.output); } if (out.length > 1200) out = out.slice(0, 1200) + '…'; currentTool.body.appendChild(el('div', 'sec', ev.is_error ? '结果（失败）' : '结果')); currentTool.body.appendChild(document.createTextNode(out)); currentTool.finish(!ev.is_error, ev.is_error ? '✗' : '✓'); currentTool = null; } break; }
       case 'turn_start': { clearActivity(); break; }
