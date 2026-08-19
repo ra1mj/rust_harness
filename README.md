@@ -42,6 +42,12 @@
 - 📁 **工作区隔离**：每会话独立工作目录，`bash`/`fs_*`/`grep`/`glob` 均作用于此，隔离于 harness 自身。
 - 📤 **导出**：Markdown / JSON。
 
+**界面**
+
+- 🎨 Claude 风格暖色设计（羊皮纸 + 陶土色），简洁克制。
+- 📝 AI 输出 markdown 渲染：链接可点、代码块带复制按钮、行内代码点击复制。
+- 📊 右侧「活动」面板（思考/工具 + 流光）+ 右上角子代理卡片，运行状态一目了然。
+
 ---
 
 ## 🚀 快速开始
@@ -117,7 +123,7 @@ export RH_MODEL=deepseek-chat                   # 可选
 
 ### Skills 系统
 
-内置 `code-review` / `write-tests` / `debugging` / `commit-message` 技能；`skill_list` 列出、`skill <name>` 加载。用户技能放在 `--skills-dir`（默认 `skills/`，每个 `.md` 一个技能），自动合并进侧栏「技能」列表。
+内置 `code-review` / `write-tests` / `debugging` / `commit-message` 技能；`skill_list` 列出、`skill <name>` 加载。用户技能放在 `--skills-dir`（默认 `skills/`，每个 `.md` 一个技能），自动合并进「设置 → 技能」卡片列表。
 
 ---
 
@@ -135,6 +141,8 @@ export RH_MODEL=deepseek-chat                   # 可选
 | `task` | spawn 子代理任务 |
 | `task_output` / `task_wait` | 读结果 / 等待结果 |
 | `task_kill` | 取消子代理 |
+| `skill` / `skill_list` | 加载 / 列出技能 |
+| `workflow_step` | 报告 Trellis 工作流阶段 |
 | （MCP） | 任意 MCP 服务器暴露的工具 |
 
 ---
@@ -199,9 +207,9 @@ crates/
 ## 🗺️ Roadmap
 
 - [ ] MCP SSE / HTTP 传输
+- [ ] 真·SSE 流式（当前为分块重放 + 打字节奏）
 - [ ] 动态插件运行时（WASM / dylib）
-- [ ] skills 系统
-- [ ] agent plan / todo 可视化面板
+- [ ] 深色模式 / 跟随系统
 - [ ] 会话搜索 / 多会话并行
 
 ---
