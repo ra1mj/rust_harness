@@ -340,6 +340,12 @@
   .model-chip.active { border-color: var(--accent); color: var(--accent-hover); background: var(--accent-soft); }
   .hint { font-size: 12px; color: var(--caption); margin-top: 8px; }
   .presets { display: flex; flex-wrap: wrap; gap: 6px; }
+  .cardgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 4px; }
+  .skill-card { border: 1px solid var(--border); border-radius: 12px; padding: 10px 12px; background: var(--bg); transition: border-color .12s var(--ease), transform .12s var(--ease); }
+  .skill-card:hover { border-color: var(--accent); transform: translateY(-1px); }
+  .skill-card .name { font-family: var(--mono); font-weight: 600; font-size: 12.5px; color: var(--accent-hover); }
+  .skill-card .desc { font-size: 12px; line-height: 1.45; color: var(--caption); margin-top: 3px; word-break: break-word; }
+  @media (max-width: 560px) { .cardgrid { grid-template-columns: 1fr; } }
   .mkt { border: 1px solid var(--border); border-radius: 13px; padding: 10px 13px; margin-bottom: 8px; }
   .mkt .row { display: flex; align-items: center; gap: 8px; }
   .mkt .info { flex: 1; min-width: 0; }
@@ -471,9 +477,9 @@
       </div>
       <div style="margin-top:18px; border-top:1px solid var(--ds-border); padding-top:14px;">
         <div class="side-label">技能</div>
-        <div id="skillsSide" class="kv"></div>
+        <div id="skillsSide" class="cardgrid"></div>
         <div class="side-label">工具</div>
-        <div id="toolsSide" class="kv"></div>
+        <div id="toolsSide" class="cardgrid"></div>
       </div>
       <div class="modal-foot"><button class="small" id="closeBtn">关闭</button></div>
     </div>
@@ -856,12 +862,19 @@
   document.getElementById('exportJson').onclick = () => { if (currentSessionId) download('/api/sessions/' + encodeURIComponent(currentSessionId) + '/export?format=json'); };
 
   // ---------- meta ----------
+  function skillCard(name, desc) {
+    const c = el('div', 'skill-card');
+    c.appendChild(el('div', 'name', name));
+    c.appendChild(el('div', 'desc', desc || ''));
+    return c;
+  }
   async function loadMeta() {
     try {
       const [tRes] = await Promise.all([fetch('/api/tools')]);
       const tools = await tRes.json();
       const side = document.getElementById('toolsSide'); side.textContent = '';
-      (tools.tools || []).forEach(t => { const c = el('span', '', t.name); c.title = t.description; side.appendChild(c); });
+      (tools.tools || []).sort((a, b) => a.name.localeCompare(b.name))
+        .forEach(t => side.appendChild(skillCard(t.name, t.description)));
     } catch (err) {}
     loadSkills();
   }
@@ -869,7 +882,8 @@
     try {
       const data = await (await fetch('/api/skills')).json();
       const side = document.getElementById('skillsSide'); side.textContent = '';
-      (data.skills || []).forEach(s => { const c = el('span', '', s.name); c.title = s.description; side.appendChild(c); });
+      (data.skills || []).sort((a, b) => a.name.localeCompare(b.name))
+        .forEach(s => side.appendChild(skillCard(s.name, s.description)));
     } catch (err) {}
   }
 
