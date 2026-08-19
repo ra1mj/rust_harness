@@ -9,8 +9,9 @@ description = "rh-providers: OpenAI-compatible HTTP model provider"
 [dependencies]
 anyhow.workspace = true
 async-trait.workspace = true
+bytes = "1"
 futures.workspace = true
 serde.workspace = true
 serde_json.workspace = true
-reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "stream"] }
 rh-agent.workspace = true

@@ -87,6 +87,7 @@ impl Agent {
         self.session.append(SessionEvent::TurnStart {
             turn_id: turn_id.clone(),
         });
+        self.session.set_running(true);
         self.session.append(SessionEvent::UserMessage {
             message_id: next_id(IdKind::Message),
             content: vec![ContentBlock::Text {
@@ -131,16 +132,12 @@ impl Agent {
                             message_id: message_id.clone(),
                             text: chunk,
                         });
-                        // Pace the stream so text types out visibly rather
-                        // than arriving all at once.
-                        tokio::time::sleep(std::time::Duration::from_millis(28)).await;
                     }
                     ModelEvent::Reasoning(chunk) => {
                         self.session.append(SessionEvent::ReasoningChunk {
                             message_id: message_id.clone(),
                             text: chunk,
                         });
-                        tokio::time::sleep(std::time::Duration::from_millis(28)).await;
                     }
                     ModelEvent::ToolCall(call) => tool_calls.push(call),
                     ModelEvent::Done(reason) => finish_reason = reason,
@@ -176,6 +173,7 @@ impl Agent {
         }
 
         self.session.append(SessionEvent::TurnEnd { turn_id });
+        self.session.set_running(false);
         Ok(RunReport {
             events: self.session.events(),
         })

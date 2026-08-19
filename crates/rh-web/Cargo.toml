@@ -20,3 +20,4 @@ rh-tool.workspace = true
 rh-tools.workspace = true
 rh-providers.workspace = true
 rh-mcp.workspace = true
+rh-plugins.workspace = true

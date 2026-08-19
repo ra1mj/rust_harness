@@ -7,14 +7,17 @@
 //! discovers their models (`GET /models`), and tracks the active
 //! provider/model pair.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::env;
 use std::path::PathBuf;
+use std::pin::Pin;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, RwLock};
 
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
+use bytes::Bytes;
+use futures::{Stream, StreamExt};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
@@ -98,27 +101,28 @@ impl OpenAiCompatibleProvider {
 #[async_trait]
 impl ModelProvider for OpenAiCompatibleProvider {
     async fn stream(&self, request: ModelRequest) -> Result<ModelStream> {
-        let (reasoning, content, tool_calls, finish_reason) = self.complete_once(&request).await?;
+        let body = self.chat_body(&request, true);
+        let url = format!("{}/chat/completions", self.base_url.trim_end_matches('/'));
+        let response = self
+            .client
+            .post(&url)
+            .bearer_auth(&self.api_key)
+            .json(&body)
+            .send()
+            .await?
+            .error_for_status()?;
 
-        let mut events: Vec<ModelEvent> = chunks(&reasoning)
-            .into_iter()
-            .map(ModelEvent::Reasoning)
-            .collect();
-        events.extend(chunks(&content).into_iter().map(ModelEvent::Text));
-        for call in tool_calls {
-            events.push(ModelEvent::ToolCall(call));
-        }
-        events.push(ModelEvent::Done(finish_reason));
-
-        Ok(Box::pin(futures::stream::iter(events)))
+        // True SSE streaming: parse `data:` lines from the response body as
+        // they arrive, emitting one `ModelEvent` per delta — no fixed-size
+        // chunking and no artificial typing pace.
+        Ok(Box::pin(sse_events(response.bytes_stream())))
     }
 }
 
 impl OpenAiCompatibleProvider {
-    async fn complete_once(
-        &self,
-        request: &ModelRequest,
-    ) -> Result<(String, String, Vec<ModelToolCall>, FinishReason)> {
+    /// Build the OpenAI `chat/completions` request body (shared by streaming
+    /// and any future non-streaming path).
+    fn chat_body(&self, request: &ModelRequest, stream: bool) -> Value {
         let messages: Vec<Value> = request
             .messages
             .iter()
@@ -168,64 +172,164 @@ impl OpenAiCompatibleProvider {
 
         // The model id comes from the request, not the adapter (dsh parity:
         // provider route = adapter, model = per-request selection).
-        let body = json!({
+        let mut body = json!({
             "model": request.model,
             "messages": messages,
             "tools": tools,
         });
-
-        let url = format!("{}/chat/completions", self.base_url.trim_end_matches('/'));
-        let response: Value = self
-            .client
-            .post(&url)
-            .bearer_auth(&self.api_key)
-            .json(&body)
-            .send()
-            .await?
-            .error_for_status()?
-            .json()
-            .await?;
-
-        let choice = response["choices"]
-            .as_array()
-            .and_then(|choices| choices.first())
-            .cloned()
-            .ok_or_else(|| anyhow!("no choices in model response"))?;
-        let message = &choice["message"];
-
-        let reasoning = message["reasoning_content"]
-            .as_str()
-            .unwrap_or_default()
-            .to_string();
-        let content = message["content"].as_str().unwrap_or_default().to_string();
-        let tool_calls: Vec<ModelToolCall> = message["tool_calls"]
-            .as_array()
-            .map(|calls| {
-                calls
-                    .iter()
-                    .filter_map(|tc| {
-                        let function = &tc["function"];
-                        Some(ModelToolCall {
-                            id: tc["id"].as_str().unwrap_or_default().to_string(),
-                            name: function["name"].as_str()?.to_string(),
-                            arguments: serde_json::from_str(
-                                function["arguments"].as_str().unwrap_or("{}"),
-                            )
-                            .unwrap_or(Value::Null),
-                        })
-                    })
-                    .collect()
-            })
-            .unwrap_or_default();
-
-        let finish_reason = match choice["finish_reason"].as_str() {
-            Some("tool_calls") => FinishReason::ToolCalls,
-            Some("length") => FinishReason::Length,
-            _ => FinishReason::Stop,
-        };
-
-        Ok((reasoning, content, tool_calls, finish_reason))
+        if stream {
+            body["stream"] = json!(true);
+        }
+        body
     }
+}
+
+/// One in-flight tool call being assembled across SSE deltas.
+struct ToolCallAcc {
+    id: String,
+    name: String,
+    arguments: String,
+}
+
+/// Incremental SSE parser state.
+struct SseState {
+    src: Pin<Box<dyn Stream<Item = Result<Bytes, reqwest::Error>> + Send>>,
+    buf: Vec<u8>,
+    pending: VecDeque<ModelEvent>,
+    tool_calls: Vec<ToolCallAcc>,
+    finish_reason: FinishReason,
+    finished: bool,
+}
+
+impl SseState {
+    /// Drain complete `\n`-terminated lines from the buffer and process them.
+    fn process_lines(&mut self) {
+        while let Some(pos) = self.buf.iter().position(|&b| b == b'\n') {
+            let line_bytes: Vec<u8> = self.buf.drain(..=pos).collect();
+            let mut line = String::from_utf8_lossy(&line_bytes).into_owned();
+            while line.ends_with('\n') || line.ends_with('\r') {
+                line.pop();
+            }
+            self.handle_line(&line);
+        }
+    }
+
+    fn handle_line(&mut self, line: &str) {
+        if line.is_empty() {
+            return;
+        }
+        let Some(data) = line.strip_prefix("data:") else {
+            return; // ignore `event:`/`id:`/keep-alive comments
+        };
+        let data = data.trim_start();
+        if data == "[DONE]" {
+            self.finish();
+            return;
+        }
+        if let Ok(value) = serde_json::from_str::<Value>(data) {
+            self.handle_delta(&value);
+        }
+    }
+
+    fn handle_delta(&mut self, value: &Value) {
+        let Some(choice) = value["choices"].as_array().and_then(|c| c.first()) else {
+            return;
+        };
+        if let Some(reason) = choice["finish_reason"].as_str() {
+            self.finish_reason = match reason {
+                "tool_calls" => FinishReason::ToolCalls,
+                "length" => FinishReason::Length,
+                _ => FinishReason::Stop,
+            };
+        }
+        let delta = &choice["delta"];
+        if let Some(text) = delta["reasoning_content"].as_str() {
+            if !text.is_empty() {
+                self.pending
+                    .push_back(ModelEvent::Reasoning(text.to_string()));
+            }
+        }
+        if let Some(text) = delta["content"].as_str() {
+            if !text.is_empty() {
+                self.pending.push_back(ModelEvent::Text(text.to_string()));
+            }
+        }
+        if let Some(calls) = delta["tool_calls"].as_array() {
+            for call in calls {
+                let index = call["index"].as_u64().unwrap_or(0) as usize;
+                while self.tool_calls.len() <= index {
+                    self.tool_calls.push(ToolCallAcc {
+                        id: String::new(),
+                        name: String::new(),
+                        arguments: String::new(),
+                    });
+                }
+                let acc = &mut self.tool_calls[index];
+                if let Some(id) = call["id"].as_str() {
+                    acc.id = id.to_string();
+                }
+                let function = &call["function"];
+                if let Some(name) = function["name"].as_str() {
+                    if !name.is_empty() {
+                        acc.name = name.to_string();
+                    }
+                }
+                if let Some(args) = function["arguments"].as_str() {
+                    acc.arguments.push_str(args);
+                }
+            }
+        }
+    }
+
+    /// Flush accumulated tool calls and the terminal event.
+    fn finish(&mut self) {
+        if self.finished {
+            return;
+        }
+        self.finished = true;
+        for acc in &self.tool_calls {
+            if !acc.name.is_empty() {
+                let arguments = serde_json::from_str(&acc.arguments).unwrap_or(Value::Null);
+                self.pending.push_back(ModelEvent::ToolCall(ModelToolCall {
+                    id: acc.id.clone(),
+                    name: acc.name.clone(),
+                    arguments,
+                }));
+            }
+        }
+        self.pending.push_back(ModelEvent::Done(self.finish_reason));
+    }
+}
+
+/// Turn a byte stream from `chat/completions?stream=true` into `ModelEvent`s.
+fn sse_events(
+    src: impl Stream<Item = Result<Bytes, reqwest::Error>> + Send + 'static,
+) -> impl Stream<Item = ModelEvent> {
+    let state = SseState {
+        src: Box::pin(src),
+        buf: Vec::new(),
+        pending: VecDeque::new(),
+        tool_calls: Vec::new(),
+        finish_reason: FinishReason::Stop,
+        finished: false,
+    };
+    futures::stream::unfold(state, |mut st| async move {
+        loop {
+            if let Some(event) = st.pending.pop_front() {
+                return Some((event, st));
+            }
+            if st.finished {
+                return None;
+            }
+            match st.src.next().await {
+                Some(Ok(chunk)) => {
+                    st.buf.extend_from_slice(&chunk);
+                    st.process_lines();
+                }
+                Some(Err(_)) | None => st.finish(),
+            }
+        }
+    })
 }
 
 /// On-disk hub state.
@@ -417,19 +521,6 @@ impl ModelHub {
             provider.api_key,
         )))
     }
-}
-
-/// Split text into fixed-size string chunks for live rendering.
-fn chunks(text: &str) -> Vec<String> {
-    const CHUNK: usize = 6;
-    if text.is_empty() {
-        return Vec::new();
-    }
-    let chars: Vec<char> = text.chars().collect();
-    chars
-        .chunks(CHUNK)
-        .map(|chunk| chunk.iter().collect())
-        .collect()
 }
 
 fn role_str(role: ModelRole) -> &'static str {

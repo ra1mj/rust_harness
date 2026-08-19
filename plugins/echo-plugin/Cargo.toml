@@ -1,0 +1,11 @@
+[package]
+name = "echo-plugin"
+version = "0.1.0"
+edition = "2021"
+description = "Reference dylib plugin for rh-plugins: exposes an `echo` tool"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+serde_json = "1"

@@ -4,7 +4,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Rust](https://img.shields.io/badge/Rust-1.75%2B-orange.svg)](rust-toolchain.toml)
-![Crates](https://img.shields.io/badge/crates-9-informational)
+![Crates](https://img.shields.io/badge/crates-10-informational)
 
 `rh` 提供浏览器端工作台 + 多模型 + 工具调用 + 子代理任务 + MCP，覆盖从「会话管理」到「能力编排」的完整 agent 运行时。
 
@@ -21,7 +21,7 @@
 **模型**
 
 - 🎯 **多 Provider / 多模型**：注册多个 provider 路由（endpoint + key），`GET /models` 发现模型，`provider + model` 双键选择。
-- ⚡ **流式输出**：模型 seam 是流式的，边收边记 `assistant/chunk`，前端实时打字。
+- ⚡ **真·SSE 流式**：`stream=true` + SSE 增量解析，token 级实时吐字（无分块重放/打字节奏）。
 
 **能力**
 
@@ -30,14 +30,15 @@
 - 🔍 **代码搜索**：`grep` / `glob`。
 - 🐚 **Shell / 文件**：`bash` / `fs_read` / `fs_write`（跨平台 shell，作用域限定在工作区）。
 - 🤖 **子代理任务**（Codex 式）：`task` / `task_output` / `task_wait` / `task_kill`，后台子代理并行执行。
-- 🔗 **MCP**：stdio MCP client + 内置市场，第三方工具一键桥接。
+- 🔗 **MCP 三种传输**：stdio / SSE / streamable HTTP client + 内置市场，第三方工具一键桥接。
 - 🧭 **工作模式**：直接对话 / 计划模式 / Trellis 工作流 三选一，带可见的阶段 stepper。
 - 📝 **计划模式**：先规划后执行，规划阶段禁止写操作（bash/fs_write 门禁）。
 - 🧠 **Skills 系统**：内置 + 目录技能，`skill`/`skill_list` 工具按需加载。
+- 🧩 **动态插件运行时（dylib）**：`cdylib` 插件（C ABI）放进 `plugins/` 即自动桥接为工具。
 
 **工作区**
 
-- 💬 **会话管理**：创建 / 切换 / 重命名 / 删除，持久化。
+- 💬 **会话管理**：创建 / 切换 / 重命名 / 删除 / **搜索**，持久化；多会话可并行运行（运行中带呼吸灯）。
 - ✅ **任务（todo）**：每会话任务清单，带状态（待办/进行中/完成/取消）+ 进度条的可视化面板。
 - 📁 **工作区隔离**：每会话独立工作目录，`bash`/`fs_*`/`grep`/`glob` 均作用于此，隔离于 harness 自身。
 - 📤 **导出**：Markdown / JSON。
@@ -45,6 +46,7 @@
 **界面**
 
 - 🎨 Claude 风格暖色设计（羊皮纸 + 陶土色），简洁克制。
+- 🌗 **深色模式**：浅色 / 深色 / 跟随系统 三档，自动持久化。
 - 📝 AI 输出 markdown 渲染：链接可点、代码块带复制按钮、行内代码点击复制。
 - 📊 右侧「活动」面板（思考/工具 + 流光）+ 右上角子代理卡片，运行状态一目了然。
 
@@ -107,7 +109,7 @@ export RH_MODEL=deepseek-chat                   # 可选
 
 ### MCP
 
-「设置 → MCP 服务器」：市场内置 12 个精选服务器（filesystem / fetch / memory / git / sqlite / github …），搜索 + 一键安装；也可粘贴任意启动命令。MCP 工具自动桥接进 `Tool` 注册表。
+「设置 → MCP 服务器」：市场内置 12 个精选服务器（filesystem / fetch / memory / git / sqlite / github …），搜索 + 一键安装；支持三种传输——**stdio**（粘贴启动命令）、**HTTP**（streamable HTTP，填 URL）、**SSE**（legacy SSE，填 URL）。MCP 工具自动桥接进 `Tool` 注册表。
 
 ### 子代理任务
 
@@ -124,6 +126,16 @@ export RH_MODEL=deepseek-chat                   # 可选
 ### Skills 系统
 
 内置 `code-review` / `write-tests` / `debugging` / `commit-message` 技能；`skill_list` 列出、`skill <name>` 加载。用户技能放在 `--skills-dir`（默认 `skills/`，每个 `.md` 一个技能），自动合并进「设置 → 技能」卡片列表。
+
+### 动态插件（dylib）
+
+把 `cdylib` 插件（导出 `rh_plugin_tools` / `rh_plugin_call` / `rh_plugin_free` 三个 C ABI 符号）放进 `--plugins-dir`（默认 `plugins/`），启动即自动桥接为工具。参考实现见 `plugins/echo-plugin`：
+
+```sh
+cargo build -p echo-plugin
+mkdir -p plugins && cp target/debug/libecho_plugin.so plugins/
+cargo run -- web
+```
 
 ---
 
@@ -165,6 +177,8 @@ export RH_MODEL=deepseek-chat                   # 可选
 | `--models-file` | 模型 hub 持久化文件 | `rh-models.json` |
 | `--data-dir` | 会话持久化目录 | `.rh` |
 | `--mcp-file` | MCP 配置持久化文件 | `rh-mcp.json` |
+| `--skills-dir` | 用户技能目录 | `skills` |
+| `--plugins-dir` | dylib 插件目录 | `plugins` |
 
 ---
 
@@ -179,8 +193,11 @@ crates/
   rh-tools/     能力 seam + 内置工具 + 子代理任务
   rh-web/       axum Web 服务 + WebSocket + REST API
   rh-providers/ OpenAI 兼容 adapter + ModelHub（模型发现/选择）
-  rh-mcp/       MCP client（stdio JSON-RPC）+ 工具桥接
+  rh-mcp/       MCP client（stdio/SSE/HTTP JSON-RPC）+ 工具桥接
+  rh-plugins/  动态 dylib 插件运行时（libloading + C ABI）
   rh-cli/       组合根 + CLI（run / tools / dump-config / web）
+plugins/
+  echo-plugin/  参考 dylib 插件（echo 工具）
 ```
 
 依赖方向：`rh-cli → rh-web/rh-tools/rh-agent → rh-session/rh-tool/rh-core`。
@@ -206,11 +223,11 @@ crates/
 
 ## 🗺️ Roadmap
 
-- [ ] MCP SSE / HTTP 传输
-- [ ] 真·SSE 流式（当前为分块重放 + 打字节奏）
-- [ ] 动态插件运行时（WASM / dylib）
-- [ ] 深色模式 / 跟随系统
-- [ ] 会话搜索 / 多会话并行
+- [ ] MCP resources / prompts（当前仅 tools）
+- [ ] WASM 插件运行时（当前为 dylib）
+- [ ] 会话全文搜索（当前为标题搜索）
+- [ ] 工具调用人工确认（human-in-the-loop）
+- [ ] 子代理 DAG 依赖编排
 
 ---
 

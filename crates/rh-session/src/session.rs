@@ -2,6 +2,7 @@
 
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, RwLock};
 
 use anyhow::{anyhow, Result};
@@ -147,6 +148,8 @@ pub struct SessionMeta {
     pub created_at: u64,
     pub event_count: usize,
     pub task_count: usize,
+    #[serde(default)]
+    pub running: bool,
 }
 
 /// The on-disk shape of a session.
@@ -223,6 +226,9 @@ pub struct Session {
     workspace: Arc<RwLock<PathBuf>>,
     work_mode: Arc<RwLock<String>>,
     workflow_phase: Arc<RwLock<Option<String>>>,
+    /// Whether a turn is currently executing against this session (used by
+    /// the UI to indicate background/parallel work).
+    running: Arc<AtomicBool>,
 }
 
 impl Session {
@@ -247,6 +253,7 @@ impl Session {
             workspace: Arc::new(RwLock::new(workspace)),
             work_mode: Arc::new(RwLock::new("direct".to_string())),
             workflow_phase: Arc::new(RwLock::new(None)),
+            running: Arc::new(AtomicBool::new(false)),
         })
     }
 
@@ -267,6 +274,7 @@ impl Session {
             workspace: Arc::new(RwLock::new(workspace)),
             work_mode: Arc::new(RwLock::new(record.work_mode.unwrap_or_else(|| "direct".to_string()))),
             workflow_phase: Arc::new(RwLock::new(record.workflow_phase)),
+            running: Arc::new(AtomicBool::new(false)),
         })
     }
 
@@ -284,6 +292,16 @@ impl Session {
 
     pub fn created_at(&self) -> u64 {
         self.created_at
+    }
+
+    /// Whether a turn is currently executing against this session.
+    pub fn is_running(&self) -> bool {
+        self.running.load(Ordering::Relaxed)
+    }
+
+    /// Mark the session as actively running (or settled).
+    pub fn set_running(&self, running: bool) {
+        self.running.store(running, Ordering::Relaxed);
     }
 
     pub fn tasks(&self) -> Vec<TaskItem> {
@@ -402,6 +420,7 @@ impl Session {
             created_at: self.created_at,
             event_count: self.len(),
             task_count: self.tasks.read().expect("tasks poisoned").len(),
+            running: self.is_running(),
         }
     }
 
@@ -550,6 +569,7 @@ impl Session {
             created_at: now_millis(),
             work_mode: Arc::new(RwLock::new(self.work_mode())),
             workflow_phase: Arc::new(RwLock::new(self.workflow_phase())),
+            running: Arc::new(AtomicBool::new(false)),
         })
     }
 }

@@ -49,6 +49,9 @@ enum Command {
         /// Directory user skills are loaded from.
         #[arg(long, default_value = "skills")]
         skills_dir: String,
+        /// Directory native (dylib) plugins are loaded from.
+        #[arg(long, default_value = "plugins")]
+        plugins_dir: String,
     },
 }
 
@@ -65,17 +68,21 @@ async fn main() -> anyhow::Result<()> {
             data_dir,
             mcp_file,
             skills_dir,
+            plugins_dir,
         } => {
             let assembled = assemble()?;
             let plugins = assembled.plugins.iter().map(|s| s.to_string()).collect();
             rh_web::serve(
                 assembled.ctx.clone(),
                 plugins,
-                addr.parse()?,
-                models_file.into(),
-                data_dir.into(),
-                mcp_file.into(),
-                skills_dir.into(),
+                rh_web::WebOptions {
+                    addr: addr.parse()?,
+                    models_file: models_file.into(),
+                    data_dir: data_dir.into(),
+                    mcp_file: mcp_file.into(),
+                    skills_dir: skills_dir.into(),
+                    plugins_dir: plugins_dir.into(),
+                },
             )
             .await
         }

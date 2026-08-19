@@ -41,16 +41,27 @@ struct AppState {
     mcp: Arc<McpHub>,
 }
 
+/// Configuration for [`serve`].
+pub struct WebOptions {
+    pub addr: SocketAddr,
+    pub models_file: PathBuf,
+    pub data_dir: PathBuf,
+    pub mcp_file: PathBuf,
+    pub skills_dir: PathBuf,
+    pub plugins_dir: PathBuf,
+}
+
 /// Serve the web UI until the process is stopped.
-pub async fn serve(
-    ctx: Context,
-    plugins: Vec<String>,
-    addr: SocketAddr,
-    models_file: PathBuf,
-    data_dir: PathBuf,
-    mcp_file: PathBuf,
-    skills_dir: PathBuf,
-) -> anyhow::Result<()> {
+pub async fn serve(ctx: Context, plugins: Vec<String>, options: WebOptions) -> anyhow::Result<()> {
+    let WebOptions {
+        addr,
+        models_file,
+        data_dir,
+        mcp_file,
+        skills_dir,
+        plugins_dir,
+    } = options;
+
     // Replace the in-memory session store with a persistent one (one JSON
     // file per session under `data_dir`). Held for the server lifetime.
     let store = Arc::new(SessionStore::persistent(data_dir, Some(ctx.clone())));
@@ -59,6 +70,12 @@ pub async fn serve(
     // Replace the built-in-only skill store with one that also loads user
     // skills from `skills_dir`.
     let _skills_registration = ctx.provide_named("SkillStore", SkillStore::new(Some(skills_dir)));
+
+    // Load native (dylib) plugins and bridge their tools into the registry.
+    let _plugin_disposers = match ctx.service::<ToolRegistry>() {
+        Some(registry) => rh_plugins::load_dir(&registry, &plugins_dir)?,
+        None => Vec::new(),
+    };
 
     let mcp = McpHub::load(mcp_file);
     mcp.connect_all(&ctx).await;
@@ -293,7 +310,9 @@ async fn get_session(
     let session = store(&state)
         .get(&id)
         .ok_or_else(|| (StatusCode::NOT_FOUND, "session not found".to_string()))?;
-    Ok(Json(json!(session.to_record())))
+    let mut record = json!(session.to_record());
+    record["running"] = json!(session.is_running());
+    Ok(Json(record))
 }
 
 async fn rename_session(

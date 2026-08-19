@@ -1,17 +1,17 @@
 [package]
-name = "rh-mcp"
+name = "rh-plugins"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
-description = "rh-mcp: Model Context Protocol client (stdio/SSE/HTTP) + tool bridge"
+description = "rh-plugins: dynamic (dylib) plugin runtime for the harness"
 
 [dependencies]
 anyhow.workspace = true
 async-trait.workspace = true
-futures.workspace = true
+libloading = "0.8"
 serde.workspace = true
 serde_json.workspace = true
 tokio.workspace = true
-reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "stream"] }
+rh-core.workspace = true
 rh-tool.workspace = true
