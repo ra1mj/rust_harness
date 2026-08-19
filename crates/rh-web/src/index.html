@@ -119,29 +119,11 @@
   /* ---------- Main / chat ---------- */
   main { flex: 1; display: flex; flex-direction: column; min-width: 0; background: var(--bg); position: relative; }
 
-  /* Top-left working indicator */
-  .working-indicator {
-    position: absolute; top: 14px; left: 18px; z-index: 20;
-    display: flex; align-items: center; gap: 8px;
-    background: var(--surface); border: 1px solid var(--border);
-    border-radius: 999px; padding: 7px 15px;
-    font-size: 12.5px; font-weight: 500; color: var(--text-2);
-    box-shadow: var(--shadow-sm);
-    animation: working-breathe 1.8s ease-in-out infinite;
-  }
-  .working-indicator .spinner {
-    width: 9px; height: 9px; border-radius: 50%;
-    background: var(--accent);
-    box-shadow: 0 0 0 0 rgba(201, 100, 66, 0.4);
-    animation: spinner-pulse 1.2s ease-in-out infinite;
-  }
-  @keyframes working-breathe {
-    0%, 100% { box-shadow: 0 1px 2px rgba(20,20,19,0.05), 0 0 0 0 rgba(201,100,66,0); opacity: 0.8; }
-    50% { box-shadow: 0 1px 2px rgba(20,20,19,0.05), 0 0 0 6px rgba(201,100,66,0.1); opacity: 1; }
-  }
-  @keyframes spinner-pulse {
-    0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(201,100,66,0.35); }
-    50% { transform: scale(0.6); box-shadow: 0 0 0 5px rgba(201,100,66,0); }
+  /* Logo "working" animation (replaces the 工作中… pill) */
+  .logo.working { animation: logo-breathe 1.5s ease-in-out infinite; }
+  @keyframes logo-breathe {
+    0%, 100% { transform: scale(1) rotate(0deg); box-shadow: 0 3px 10px rgba(201,100,66,0.28); }
+    50% { transform: scale(1.15) rotate(-4deg); box-shadow: 0 0 0 9px rgba(201,100,66,0.14); }
   }
 
   /* Top-right subagent panel */
@@ -385,7 +367,7 @@
 <body>
   <aside>
     <div class="side-head">
-      <div class="logo">🐋</div>
+      <div class="logo" id="logo">🐋</div>
       <div><div class="title">Rust Harness</div><div class="sub">多模型 · 工具调用</div></div>
     </div>
     <button class="new-session" id="newSession">＋ 新会话</button>
@@ -409,7 +391,6 @@
   </aside>
 
   <main>
-    <div class="working-indicator hidden" id="workingIndicator"><span class="spinner"></span><span>工作中…</span></div>
     <div class="subagents" id="subagents"></div>
     <div class="hero" id="hero">
       <div class="glow"><div class="mark">🐋</div></div>
@@ -544,7 +525,7 @@
     };
   }
   function setStatus(s, t) { dot.className = 'status-dot ' + s; statusText.textContent = t; }
-  function setWorking(on) { working = on; sendBtn.disabled = on; setStatus(on ? 'working' : 'on', on ? '工作中…' : '已连接'); document.getElementById('workingIndicator').classList.toggle('hidden', !on); }
+  function setWorking(on) { working = on; sendBtn.disabled = on; setStatus(on ? 'working' : 'on', on ? '工作中…' : '已连接'); const logo = document.getElementById('logo'); if (logo) logo.classList.toggle('working', on); }
   function setHero(show) { hero.classList.toggle('hidden', !show); }
   function scrollBottom() { transcript.scrollTop = transcript.scrollHeight; }
   function textFromContent(c) { return Array.isArray(c) ? c.filter(b => b.kind === 'text').map(b => b.text).join('\n') : ''; }
