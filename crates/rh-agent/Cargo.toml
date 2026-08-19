@@ -12,9 +12,7 @@ async-trait.workspace = true
 futures.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+tokio.workspace = true
 rh-core.workspace = true
 rh-session.workspace = true
 rh-tool.workspace = true
-
-[dev-dependencies]
-tokio.workspace = true

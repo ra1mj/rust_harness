@@ -119,11 +119,11 @@
   /* ---------- Main / chat ---------- */
   main { flex: 1; display: flex; flex-direction: column; min-width: 0; background: var(--bg); position: relative; }
 
-  /* Logo "working" animation (replaces the 工作中… pill) */
-  .logo.working { animation: logo-breathe 1.5s ease-in-out infinite; }
-  @keyframes logo-breathe {
-    0%, 100% { transform: scale(1) rotate(0deg); box-shadow: 0 3px 10px rgba(201,100,66,0.28); }
-    50% { transform: scale(1.15) rotate(-4deg); box-shadow: 0 0 0 9px rgba(201,100,66,0.14); }
+  /* Assistant avatar "working" animation (breathes while streaming) */
+  .avatar.working { animation: avatar-breathe 1.3s ease-in-out infinite; }
+  @keyframes avatar-breathe {
+    0%, 100% { transform: scale(1); box-shadow: 0 2px 6px rgba(201,100,66,0.24); }
+    50% { transform: scale(1.18); box-shadow: 0 0 0 7px rgba(201,100,66,0.13); }
   }
 
   /* Top-right subagent panel */
@@ -367,7 +367,7 @@
 <body>
   <aside>
     <div class="side-head">
-      <div class="logo" id="logo">🐋</div>
+      <div class="logo">🐋</div>
       <div><div class="title">Rust Harness</div><div class="sub">多模型 · 工具调用</div></div>
     </div>
     <button class="new-session" id="newSession">＋ 新会话</button>
@@ -525,7 +525,7 @@
     };
   }
   function setStatus(s, t) { dot.className = 'status-dot ' + s; statusText.textContent = t; }
-  function setWorking(on) { working = on; sendBtn.disabled = on; setStatus(on ? 'working' : 'on', on ? '工作中…' : '已连接'); const logo = document.getElementById('logo'); if (logo) logo.classList.toggle('working', on); }
+  function setWorking(on) { working = on; sendBtn.disabled = on; setStatus(on ? 'working' : 'on', on ? '工作中…' : '已连接'); }
   function setHero(show) { hero.classList.toggle('hidden', !show); }
   function scrollBottom() { transcript.scrollTop = transcript.scrollHeight; }
   function textFromContent(c) { return Array.isArray(c) ? c.filter(b => b.kind === 'text').map(b => b.text).join('\n') : ''; }
@@ -535,11 +535,12 @@
   function ensureAssistant() {
     if (currentAssistant) return currentAssistant;
     const row = el('div', 'msg-assistant');
-    row.appendChild(el('div', 'avatar', '🐋'));
+    const avatar = el('div', 'avatar working', '🐋');
+    row.appendChild(avatar);
     const body = el('div', 'body');
     const text = el('div', 'text', '');
     body.appendChild(text); row.appendChild(body); addRow(row);
-    currentAssistant = { text };
+    currentAssistant = { text, avatar };
     return currentAssistant;
   }
 
@@ -586,7 +587,7 @@
       case 'user_message': { const row = el('div', 'msg-user'); row.appendChild(el('div', 'bubble', textFromContent(ev.content))); addRow(row); currentAssistant = null; currentTool = null; break; }
       case 'assistant_chunk': { ensureAssistant().text.textContent += ev.text; scrollBottom(); break; }
       case 'reasoning_chunk': { if (!currentReasoning) currentReasoning = addActivity('💭', '思考'); currentReasoning.body.appendChild(document.createTextNode(ev.text)); break; }
-      case 'assistant_message': { const text = textFromContent(ev.content); if (currentAssistant) { if (text && !currentAssistant.text.textContent) currentAssistant.text.textContent = text; currentAssistant = null; } else if (text) { ensureAssistant().text.textContent = text; currentAssistant = null; } if (currentReasoning) { currentReasoning.finish(true, '完成'); currentReasoning = null; } currentTool = null; break; }
+      case 'assistant_message': { const text = textFromContent(ev.content); if (currentAssistant) { if (currentAssistant.avatar) currentAssistant.avatar.classList.remove('working'); if (text && !currentAssistant.text.textContent) currentAssistant.text.textContent = text; currentAssistant = null; } else if (text) { const a = ensureAssistant(); a.avatar.classList.remove('working'); a.text.textContent = text; currentAssistant = null; } if (currentReasoning) { currentReasoning.finish(true, '完成'); currentReasoning = null; } currentTool = null; break; }
       case 'tool_call': { currentTool = addActivity('⚙', ev.tool_name); currentTool.body.appendChild(el('div', 'sec', '参数')); currentTool.body.appendChild(document.createTextNode(JSON.stringify(ev.arguments || {}))); currentAssistant = null; break; }
       case 'tool_result': { if (currentTool) { let out; try { out = typeof ev.output === 'string' ? ev.output : JSON.stringify(ev.output); } catch (e) { out = String(ev.output); } if (out.length > 1200) out = out.slice(0, 1200) + '…'; currentTool.body.appendChild(el('div', 'sec', ev.is_error ? '结果（失败）' : '结果')); currentTool.body.appendChild(document.createTextNode(out)); currentTool.finish(!ev.is_error, ev.is_error ? '✗' : '✓'); currentTool = null; } break; }
       case 'turn_start': { clearActivity(); break; }

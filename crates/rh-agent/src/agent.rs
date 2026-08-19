@@ -131,12 +131,16 @@ impl Agent {
                             message_id: message_id.clone(),
                             text: chunk,
                         });
+                        // Pace the stream so text types out visibly rather
+                        // than arriving all at once.
+                        tokio::time::sleep(std::time::Duration::from_millis(28)).await;
                     }
                     ModelEvent::Reasoning(chunk) => {
                         self.session.append(SessionEvent::ReasoningChunk {
                             message_id: message_id.clone(),
                             text: chunk,
                         });
+                        tokio::time::sleep(std::time::Duration::from_millis(28)).await;
                     }
                     ModelEvent::ToolCall(call) => tool_calls.push(call),
                     ModelEvent::Done(reason) => finish_reason = reason,
